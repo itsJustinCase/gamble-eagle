@@ -58,49 +58,47 @@ jobs:
           playwright install chromium --with-deps
 
       # ── 4. Run scrapers ──────────────────────────────────────────────────────
-      # Each scraper writes its canonical CSV to the working directory.
-      # Failures are caught individually so one broken scraper doesn't
-      # stop the others from running.
+      # Each scraper writes its canonical CSV relative to its own location.
+      # We cd into scrapers/ so all CSVs land there, and compare_and_pr.py
+      # (which also lives in scrapers/) finds them in the same directory.
       - name: Run scrapers
         run: |
+          cd scrapers
           INPUT="${{ github.event.inputs.scrapers }}"
           SCRAPERS="${INPUT:-all}"
           echo "Scraper selection: $SCRAPERS"
 
           run_scraper() {
-            local script="scrapers/$1"
-            if [ ! -f "$script" ]; then
-              echo "⚠️  $script not found — skipping."
+            if [ ! -f "$1" ]; then
+              echo "⚠️  $1 not found — skipping."
               return
             fi
             echo "▶️  Running $1..."
-            # Run from repo root; scraper writes CSV to current dir
-            python "$script" && echo "✅  $1 done" || echo "❌  $1 failed"
+            python "$1" && echo "✅  $1 done" || echo "❌  $1 failed"
           }
 
           if [ "$SCRAPERS" = "all" ]; then
-            for f in scrapers/fetch_*.py; do
-              run_scraper "$(basename $f)"
+            for f in fetch_*.py; do
+              run_scraper "$f"
             done
           else
             IFS=',' read -ra LIST <<< "$SCRAPERS"
             for name in "${LIST[@]}"; do
-              name=$(echo "$name" | xargs)  # trim whitespace
+              name=$(echo "$name" | xargs)
               run_scraper "fetch_${name}.py"
             done
           fi
 
-      # ── 5. Move CSVs to repo root (where compare_and_pr.py expects them) ───
-      # Scrapers write to CWD which is repo root, so this is a no-op unless
-      # you move scrapers to a subfolder — kept explicit for clarity.
+      # ── 5. Verify CSVs were produced ─────────────────────────────────────────
       - name: Verify CSVs produced
         run: |
-          echo "CSVs in working directory:"
-          ls -lh *.csv 2>/dev/null || echo "  (none found)"
+          echo "CSVs in scrapers/:"
+          ls -lh scrapers/*.csv 2>/dev/null || echo "  (none found)"
 
       # ── 6. Compare and open PR ───────────────────────────────────────────────
       - name: Compare and open PR
         env:
           GITHUB_TOKEN: ${{ secrets.GAMBLEEAGLE_TOKEN }}
         run: |
-          python scrapers/compare_and_pr.py
+          cd scrapers
+          python compare_and_pr.py
