@@ -33,9 +33,17 @@ jobs:
       pull-requests: write  # open PRs
 
     steps:
-      # ── 1. Checkout repo ────────────────────────────────────────────────────
-      - name: Checkout
+      # ── 1. Check out only the scrapers folder (sparse checkout) ────────────
+      # We need the scraper scripts but NOT the CSV files — if we check out
+      # the CSVs, the freshly scraped output overwrites them and compare_and_pr.py
+      # ends up comparing a file against itself (always "no changes").
+      # Sparse checkout gives us just the scripts without the CSVs.
+      - name: Checkout scrapers only
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scrapers
+          sparse-checkout-cone-mode: false
 
       # ── 2. Set up Python ────────────────────────────────────────────────────
       - name: Set up Python
