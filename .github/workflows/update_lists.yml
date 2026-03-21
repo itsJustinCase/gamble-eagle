@@ -20,7 +20,8 @@ on:
         type: string
 
 env:
-  TZ: Europe/Paris   # All timestamps in Paris time
+  TZ: Europe/Paris
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   update-lists:
@@ -41,7 +42,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
 
       # ── 3. Install dependencies ──────────────────────────────────────────────
       - name: Install dependencies
@@ -93,6 +93,6 @@ jobs:
       # ── 6. Compare and open PR ───────────────────────────────────────────────
       - name: Compare and open PR
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GAMBLEEAGLE_TOKEN }}
         run: |
           python scrapers/compare_and_pr.py
