@@ -1,0 +1,3 @@
+compare_and_pr.py — reads each local CSV, fetches the current version from GitHub via the API, diffs them (ignoring line 1 timestamps), and if anything changed: creates a branch named update-lists-YYYYMMDD-HHMM, pushes the changed files, and opens a PR with a formatted description listing every domain added and removed per country. Runs silently with no output if nothing changed.
+
+scraper scripts extract urls bespoke to each regulator source (website, pdf, excel)
