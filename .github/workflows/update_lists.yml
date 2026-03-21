@@ -1,0 +1,98 @@
+name: Update Licensed Operator Lists
+
+on:
+  # ── Scheduled runs ──────────────────────────────────────────────────────────
+  # Runs every 10 days at 08:00 UTC (09:00 or 10:00 Paris time depending on DST).
+  # To test at high cadence change to e.g. "0 * * * *" (every hour).
+  # Cron syntax: minute hour day-of-month month day-of-week
+  schedule:
+    - cron: "0 8 */10 * *"
+
+  # ── Manual trigger ───────────────────────────────────────────────────────────
+  # Lets you run the workflow from the GitHub Actions tab at any time,
+  # with an optional selector for which scrapers to run.
+  workflow_dispatch:
+    inputs:
+      scrapers:
+        description: "Which scrapers to run (comma-separated, or 'all')"
+        required: false
+        default: "all"
+        type: string
+
+env:
+  TZ: Europe/Paris   # All timestamps in Paris time
+
+jobs:
+  update-lists:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: write       # push branches
+      pull-requests: write  # open PRs
+
+    steps:
+      # ── 1. Checkout repo ────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ────────────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # ── 3. Install dependencies ──────────────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 playwright pandas openpyxl pytz
+          playwright install chromium --with-deps
+
+      # ── 4. Run scrapers ──────────────────────────────────────────────────────
+      # Each scraper writes its canonical CSV to the working directory.
+      # Failures are caught individually so one broken scraper doesn't
+      # stop the others from running.
+      - name: Run scrapers
+        run: |
+          INPUT="${{ github.event.inputs.scrapers }}"
+          SCRAPERS="${INPUT:-all}"
+          echo "Scraper selection: $SCRAPERS"
+
+          run_scraper() {
+            local script="scrapers/$1"
+            if [ ! -f "$script" ]; then
+              echo "⚠️  $script not found — skipping."
+              return
+            fi
+            echo "▶️  Running $1..."
+            # Run from repo root; scraper writes CSV to current dir
+            python "$script" && echo "✅  $1 done" || echo "❌  $1 failed"
+          }
+
+          if [ "$SCRAPERS" = "all" ]; then
+            for f in scrapers/fetch_*.py; do
+              run_scraper "$(basename $f)"
+            done
+          else
+            IFS=',' read -ra LIST <<< "$SCRAPERS"
+            for name in "${LIST[@]}"; do
+              name=$(echo "$name" | xargs)  # trim whitespace
+              run_scraper "fetch_${name}.py"
+            done
+          fi
+
+      # ── 5. Move CSVs to repo root (where compare_and_pr.py expects them) ───
+      # Scrapers write to CWD which is repo root, so this is a no-op unless
+      # you move scrapers to a subfolder — kept explicit for clarity.
+      - name: Verify CSVs produced
+        run: |
+          echo "CSVs in working directory:"
+          ls -lh *.csv 2>/dev/null || echo "  (none found)"
+
+      # ── 6. Compare and open PR ───────────────────────────────────────────────
+      - name: Compare and open PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scrapers/compare_and_pr.py
