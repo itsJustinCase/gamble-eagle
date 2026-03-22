@@ -38,6 +38,7 @@ CSV_FILES = {
     "sweden.csv":      "sweden.csv",
     "netherlands.csv": "netherlands.csv",
     "ontario.csv":     "ontario.csv",
+    "brazil.csv":      "brazil.csv",
     "NJ.csv":          "NJ.csv",
     "MI.csv":          "MI.csv",
 }
