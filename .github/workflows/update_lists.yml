@@ -119,23 +119,35 @@ jobs:
           RUN_DATE=$(date +'%Y%m%d')
           echo "date=$RUN_DATE" >> $GITHUB_OUTPUT
 
-          PR_URL="${{ steps.compare.outputs.pr_url }}"
-          COMPARE_OUTPUT=$(cat /tmp/compare_output.txt)
+          python3 - << 'PYEOF'
+          import os
 
-          cat > /tmp/email_body.txt << EOF
-          Gamble Eagle — List Update Ready to Review
+          run_date = os.popen("date +'%Y%m%d'").read().strip()
+          run_num  = "${{ github.run_number }}"
+          pr_url   = "${{ steps.compare.outputs.pr_url }}"
 
-          Date:   ${RUN_DATE}
-          Run:    #${{ github.run_number }}
-          PR:     ${PR_URL}
+          with open("/tmp/compare_output.txt", "r") as f:
+              compare_output = f.read().strip()
 
-          ── Changes detected ──────────────────────────────────
+          body = f"""Gamble Eagle - List Update Ready to Review
 
-          ${COMPARE_OUTPUT}
+          Date:  {run_date}
+          Run:   #{run_num}
+          PR:    {pr_url}
 
-          ──────────────────────────────────────────────────────
+          Changes detected:
+          {compare_output}
+
           Review and merge the PR to deploy changes to the extension.
-          EOF
+          """
+
+          # Strip leading spaces from each line (caused by Python indentation)
+          lines = [line.lstrip() for line in body.splitlines()]
+          with open("/tmp/email_body.txt", "w") as f:
+              f.write("\n".join(lines))
+
+          print("Email body written successfully.")
+          PYEOF
 
       # ── 8. Send email summary ────────────────────────────────────────────────
       - name: Send email summary
