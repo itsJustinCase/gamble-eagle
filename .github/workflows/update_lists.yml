@@ -103,23 +103,41 @@ jobs:
         run: |
           cd scrapers
           python compare_and_pr.py | tee /tmp/compare_output.txt
-          # Extract PR URL if one was opened (for email body)
           PR_URL=$(grep "PR opened:" /tmp/compare_output.txt | sed 's/.*PR opened: //')
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
-          # Check if any changes were found
           if grep -q "No PR needed" /tmp/compare_output.txt; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
-      # ── 7. Send email summary ────────────────────────────────────────────────
-      # Only sends when changes were detected and a PR was opened.
-      # Requires two repo secrets:
-      #   MAIL_USERNAME — your Gmail address (e.g. you@gmail.com)
-      #   MAIL_PASSWORD — Gmail App Password (not your regular password)
-      # To create an App Password: Google Account → Security → 2-Step Verification
-      # → App Passwords → create one named "Gamble Eagle"
+      # ── 7. Build email body ───────────────────────────────────────────────────
+      - name: Build email body
+        id: email
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          RUN_DATE=$(date +'%Y%m%d')
+          echo "date=$RUN_DATE" >> $GITHUB_OUTPUT
+
+          PR_URL="${{ steps.compare.outputs.pr_url }}"
+          COMPARE_OUTPUT=$(cat /tmp/compare_output.txt)
+
+          cat > /tmp/email_body.txt << EOF
+          Gamble Eagle — List Update Ready to Review
+
+          Date:   ${RUN_DATE}
+          Run:    #${{ github.run_number }}
+          PR:     ${PR_URL}
+
+          ── Changes detected ──────────────────────────────────
+
+          ${COMPARE_OUTPUT}
+
+          ──────────────────────────────────────────────────────
+          Review and merge the PR to deploy changes to the extension.
+          EOF
+
+      # ── 8. Send email summary ────────────────────────────────────────────────
       - name: Send email summary
         if: steps.compare.outputs.changed == 'true'
         uses: dawidd6/action-send-mail@v3
@@ -131,18 +149,10 @@ jobs:
           password: ${{ secrets.MAIL_PASSWORD }}
           to: ${{ secrets.MAIL_USERNAME }}
           from: Gamble Eagle <${{ secrets.MAIL_USERNAME }}>
-          subject: "🦅 Gamble Eagle — List Update Ready to Review"
-          body: |
-            A new Pull Request has been opened with updated licensed operator lists.
+          subject: "🦅 Gamble Eagle — List Update Ready to Review ${{ steps.email.outputs.date }} #${{ github.run_number }}"
+          body_path: /tmp/email_body.txt
 
-            PR: ${{ steps.compare.outputs.pr_url }}
-
-            Full output:
-            $(cat /tmp/compare_output.txt)
-
-            Review and merge to deploy the changes to the extension.
-
-      # ── 8. Send failure email ────────────────────────────────────────────────
+      # ── 9. Send failure email ────────────────────────────────────────────────
       - name: Send failure notification
         if: failure()
         uses: dawidd6/action-send-mail@v3
@@ -154,10 +164,10 @@ jobs:
           password: ${{ secrets.MAIL_PASSWORD }}
           to: ${{ secrets.MAIL_USERNAME }}
           from: Gamble Eagle <${{ secrets.MAIL_USERNAME }}>
-          subject: "❌ Gamble Eagle — Workflow Failed"
+          subject: "❌ Gamble Eagle — Workflow Failed #${{ github.run_number }}"
           body: |
             The Gamble Eagle update workflow failed.
 
-            Run: https://github.com/itsJustinCase/gamble-eagle/actions
+            Run #${{ github.run_number }}: https://github.com/itsJustinCase/gamble-eagle/actions
 
             Check the Actions log for details.
