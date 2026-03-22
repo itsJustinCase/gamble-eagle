@@ -119,35 +119,26 @@ jobs:
           RUN_DATE=$(date +'%Y%m%d')
           echo "date=$RUN_DATE" >> $GITHUB_OUTPUT
 
-          python3 - << 'PYEOF'
-          import os
+          COMPARE_OUTPUT=$(cat /tmp/compare_output.txt)
+          PR_URL="${{ steps.compare.outputs.pr_url }}"
+          RUN_NUM="${{ github.run_number }}"
 
-          run_date = os.popen("date +'%Y%m%d'").read().strip()
-          run_num  = "${{ github.run_number }}"
-          pr_url   = "${{ steps.compare.outputs.pr_url }}"
-
-          with open("/tmp/compare_output.txt", "r") as f:
-              compare_output = f.read().strip()
-
-          body = f"""Gamble Eagle - List Update Ready to Review
-
-          Date:  {run_date}
-          Run:   #{run_num}
-          PR:    {pr_url}
-
-          Changes detected:
-          {compare_output}
-
-          Review and merge the PR to deploy changes to the extension.
-          """
-
-          # Strip leading spaces from each line (caused by Python indentation)
-          lines = [line.lstrip() for line in body.splitlines()]
-          with open("/tmp/email_body.txt", "w") as f:
-              f.write("\n".join(lines))
-
-          print("Email body written successfully.")
-          PYEOF
+          # Write to GITHUB_OUTPUT using multiline syntax
+          {
+            echo "body<<BODYEOF"
+            echo "Gamble Eagle - List Update Ready to Review"
+            echo ""
+            echo "Date:  ${RUN_DATE}"
+            echo "Run:   #${RUN_NUM}"
+            echo "PR:    ${PR_URL}"
+            echo ""
+            echo "Changes detected:"
+            echo ""
+            echo "${COMPARE_OUTPUT}"
+            echo ""
+            echo "Review and merge the PR to deploy changes to the extension."
+            echo "BODYEOF"
+          } >> $GITHUB_OUTPUT
 
       # ── 8. Send email summary ────────────────────────────────────────────────
       - name: Send email summary
@@ -162,7 +153,7 @@ jobs:
           to: ${{ secrets.MAIL_USERNAME }}
           from: Gamble Eagle <${{ secrets.MAIL_USERNAME }}>
           subject: "🦅 Gamble Eagle — List Update Ready to Review ${{ steps.email.outputs.date }} #${{ github.run_number }}"
-          body_path: /tmp/email_body.txt
+          body: ${{ steps.email.outputs.body }}
 
       # ── 9. Send failure email ────────────────────────────────────────────────
       - name: Send failure notification
