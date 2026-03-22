@@ -97,8 +97,67 @@ jobs:
 
       # ── 6. Compare and open PR ───────────────────────────────────────────────
       - name: Compare and open PR
+        id: compare
         env:
           GITHUB_TOKEN: ${{ secrets.GAMBLEEAGLE_TOKEN }}
         run: |
           cd scrapers
-          python compare_and_pr.py
+          python compare_and_pr.py | tee /tmp/compare_output.txt
+          # Extract PR URL if one was opened (for email body)
+          PR_URL=$(grep "PR opened:" /tmp/compare_output.txt | sed 's/.*PR opened: //')
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          # Check if any changes were found
+          if grep -q "No PR needed" /tmp/compare_output.txt; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 7. Send email summary ────────────────────────────────────────────────
+      # Only sends when changes were detected and a PR was opened.
+      # Requires two repo secrets:
+      #   MAIL_USERNAME — your Gmail address (e.g. you@gmail.com)
+      #   MAIL_PASSWORD — Gmail App Password (not your regular password)
+      # To create an App Password: Google Account → Security → 2-Step Verification
+      # → App Passwords → create one named "Gamble Eagle"
+      - name: Send email summary
+        if: steps.compare.outputs.changed == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          to: ${{ secrets.MAIL_USERNAME }}
+          from: Gamble Eagle <${{ secrets.MAIL_USERNAME }}>
+          subject: "🦅 Gamble Eagle — List Update Ready to Review"
+          body: |
+            A new Pull Request has been opened with updated licensed operator lists.
+
+            PR: ${{ steps.compare.outputs.pr_url }}
+
+            Full output:
+            $(cat /tmp/compare_output.txt)
+
+            Review and merge to deploy the changes to the extension.
+
+      # ── 8. Send failure email ────────────────────────────────────────────────
+      - name: Send failure notification
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          to: ${{ secrets.MAIL_USERNAME }}
+          from: Gamble Eagle <${{ secrets.MAIL_USERNAME }}>
+          subject: "❌ Gamble Eagle — Workflow Failed"
+          body: |
+            The Gamble Eagle update workflow failed.
+
+            Run: https://github.com/itsJustinCase/gamble-eagle/actions
+
+            Check the Actions log for details.
