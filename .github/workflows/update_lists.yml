@@ -26,7 +26,7 @@ env:
 jobs:
   update-lists:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     permissions:
       contents: write       # push branches
