@@ -1,48 +1,38 @@
 name: Romania Scraper
-
 on:
-  schedule:
-    # Runs every day at midnight
-    - cron: '0 0 * * *'
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
 
 jobs:
-  run-scraper:
+  scrape:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           
-      - name: Install System Dependencies
+      - name: Install Deps
         run: |
-          # Fix for Ubuntu 24.04 library name changes (libasound2 -> libasound2t64)
-          sudo apt-get update
-          
-      - name: Install Python Dependencies
-        run: |
-          # Installs playwright, playwright-stealth, beautifulsoup4, and pytz
           pip install -r requirements.txt
-          
-      - name: Install Playwright Browsers
-        run: |
-          # Install Chromium and the specific system libraries it needs to run headlessly
+          sudo apt-get update
           playwright install chromium
           playwright install-deps chromium
           
-      - name: Execute Scraper
-        # Points to the script inside your 'scrapers/' folder
+      # Run the script using the subfolder path
+      - name: Run Scraper
         run: python scrapers/fetch_romania.py
         
-      - name: Push Results
+      - name: Commit and Push
         run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          # Ensure the CSV is added regardless of which folder it was saved in
-          git add *.csv || git add scrapers/*.csv
-          git commit -m "Update Romania domains [skip ci]" || exit 0
+          git config --global user.name "bot"
+          git config --global user.email "bot@users.noreply.github.com"
+          git add romania.csv
+          git commit -m "update romania domains [skip ci]" || exit 0
           git push
