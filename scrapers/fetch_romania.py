@@ -1,29 +1,16 @@
 #!/usr/bin/env python3
 """
-Romania Licensed Gambling Sites Scraper
-========================================
-Source: Oficiul Național pentru Jocuri de Noroc (ONJN)
+Romania Licensed Gambling Sites Scraper (ONJN)
+===============================================
+Source: Oficiul Național pentru Jocuri de Noroc
         https://onjn.gov.ro/licentiati-clasa-i/
 
-The ONJN site serves a JavaScript challenge page (Cloudflare or equivalent)
-that returns 503 to all HTTP clients including curl_cffi. Playwright with a
-real Chromium browser solves the challenge automatically and renders the page.
-
-The page has a table of licensed operators. The column
-"Sediu social, date de identificare" contains company address,
-registration details, and one or more domain names (www.xxx.ro etc.)
-listed after a "Domeniu:" label. We extract every domain from that column.
-
-Requirements:
-    pip install playwright beautifulsoup4
-    playwright install chromium
+Uses curl-cffi to impersonate a real browser and bypass Cloudflare/bot protection
+that blocks standard requests and headless Playwright on GitHub Actions runners.
 """
 
 import re
-import time
-from bs4 import BeautifulSoup
 from datetime import datetime
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 try:
     from zoneinfo import ZoneInfo
@@ -36,205 +23,154 @@ except ImportError:
     def _paris_now():
         return datetime.now(_PARIS)
 
-# ── Config ────────────────────────────────────────────────────────────────────
+try:
+    from curl_cffi import requests as cffi_requests
+    HAS_CURL_CFFI = True
+except ImportError:
+    import requests
+    HAS_CURL_CFFI = False
+    print("⚠️  curl-cffi not available, falling back to requests (may fail on bot-protected sites)")
 
-SOURCE_URL   = "https://onjn.gov.ro/licentiati-clasa-i/"
-MIN_EXPECTED = 5
-PAGE_WAIT_MS = 5000    # generous wait for challenge + page render
+from bs4 import BeautifulSoup
 
-# Domains to exclude — government/admin sites that appear in address text
-EXCLUDED_DOMAINS = {
-    "onjn.gov.ro", "gov.ro", "anaf.ro", "registrul.ro",
-    "example.com", "test.com",
+URL = "https://onjn.gov.ro/licentiati-clasa-i/"
+MIN_EXPECTED = 10
+
+HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Cache-Control": "max-age=0",
 }
 
-# ── Canonical CSV writer ──────────────────────────────────────────────────────
 
 def write_canonical_csv(urls, filepath):
-    seen = set()
-    unique = []
-    for u in urls:
-        if u not in seen:
-            seen.add(u)
-            unique.append(u)
-    unique.sort()
     stamp = _paris_now().strftime('%Y%m%d %H:%M')
     with open(filepath, 'w', newline='', encoding='utf-8') as f:
         f.write(stamp + '\n')
-        for url in unique:
+        for url in urls:
             f.write(url.strip() + '\n')
-    print(f"💾  Saved {len(unique)} URLs → {filepath}  (stamp: {stamp})")
-    return unique
+    print(f"💾  Saved {len(urls)} URLs → {filepath}  (stamp: {stamp})")
 
-# ── URL cleaner ───────────────────────────────────────────────────────────────
 
-def clean_url(raw):
-    url = raw.strip().lower()
-    url = re.sub(r'^https?://', '', url)
-    url = re.sub(r'^www\.', '', url)
-    url = url.rstrip('/')
-    return url
+def clean_domain(raw):
+    d = raw.strip().lower()
+    d = re.sub(r'^https?://', '', d)
+    d = re.sub(r'^www\.', '', d)
+    return d.rstrip('/')
 
-# ── Domain pattern ────────────────────────────────────────────────────────────
 
-# Match www.something.tld or something.ro/.com etc.
-DOMAIN_PATTERN = re.compile(
-    r'\bwww\.[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b'
-    r'|'
-    r'\b[a-zA-Z0-9][a-zA-Z0-9-]+\.[a-zA-Z]{2,3}\b',
-    re.IGNORECASE
-)
+def is_valid_domain(d):
+    if not d or len(d) < 4 or '.' not in d:
+        return False
+    # Must look like a domain, not a sentence or garbage
+    if ' ' in d or len(d) > 100:
+        return False
+    return True
 
-def extract_domains_from_text(text):
-    matches = DOMAIN_PATTERN.findall(text)
-    results = []
-    for m in matches:
-        cleaned = clean_url(m)
-        if (cleaned
-                and cleaned not in EXCLUDED_DOMAINS
-                and "." in cleaned
-                and all(p for p in cleaned.split("."))):
-            results.append(cleaned)
-    return results
 
-# ── Column detector ───────────────────────────────────────────────────────────
-
-def find_sediu_column_index(header_row):
-    """Find the 'Sediu social' / 'Domeniu' column index from the header row."""
-    for i, cell in enumerate(header_row.find_all(["th", "td"])):
-        text = cell.get_text(strip=True).lower()
-        if "sediu" in text or "domeniu" in text or "website" in text:
-            return i
-    return None
-
-# ── Page extractor ────────────────────────────────────────────────────────────
-
-def extract_urls_from_html(html):
-    """
-    Parse rendered HTML and extract all domains from the Sediu social column.
-    Falls back to scanning all cells if the column can't be identified.
-    """
-    soup = BeautifulSoup(html, "html.parser")
-    urls = []
-
-    table = soup.find("table")
-    if not table:
-        print("    ⚠️  No table found in rendered HTML.")
-        return urls
-
-    rows = table.find_all("tr")
-    if not rows:
-        print("    ⚠️  Table has no rows.")
-        return urls
-
-    header_row = rows[0]
-    sediu_col = find_sediu_column_index(header_row)
-
-    if sediu_col is not None:
-        print(f"    ✓ 'Sediu social' column at index {sediu_col}")
-        data_rows = rows[1:]
+def fetch_page():
+    print(f"🌐  Fetching {URL}")
+    if HAS_CURL_CFFI:
+        # Impersonate Chrome 120 — bypasses most Cloudflare challenges
+        resp = cffi_requests.get(
+            URL,
+            headers=HEADERS,
+            impersonate="chrome120",
+            timeout=30,
+            allow_redirects=True
+        )
     else:
-        print("    ⚠️  Column header not detected — scanning all cells.")
-        data_rows = rows
+        import requests as req
+        resp = req.get(URL, headers=HEADERS, timeout=30)
 
-    seen = set()
-    for row in data_rows:
-        cells = row.find_all(["td", "th"])
-        if not cells:
-            continue
+    resp.raise_for_status()
+    print(f"    ✅  HTTP {resp.status_code} — {len(resp.content):,} bytes")
+    return resp.text
 
-        if sediu_col is not None and len(cells) > sediu_col:
-            cell_text = cells[sediu_col].get_text(separator="\n", strip=True)
-            domains = extract_domains_from_text(cell_text)
-        else:
-            domains = []
-            for cell in cells:
-                domains.extend(extract_domains_from_text(
-                    cell.get_text(separator="\n", strip=True)
-                ))
 
-        for d in domains:
-            if d not in seen:
-                seen.add(d)
-                urls.append(d)
-                print(f"  Found: {d}")
+def extract_domains(html):
+    soup = BeautifulSoup(html, 'html.parser')
 
-    return urls
+    domains = set()
 
-# ── Scraper ───────────────────────────────────────────────────────────────────
+    # Strategy 1: find all links ending in known Romanian gambling TLDs or .com/.net/.org
+    # The ONJN page lists domains as links or plain text in table cells
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        text = a.get_text(strip=True)
+        for candidate in [href, text]:
+            cleaned = clean_domain(candidate)
+            if is_valid_domain(cleaned) and not cleaned.startswith('onjn.gov'):
+                domains.add(cleaned)
 
-def scrape():
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox"]
+    # Strategy 2: extract from table cells — ONJN uses a WordPress table plugin
+    for td in soup.find_all(['td', 'th']):
+        text = td.get_text(strip=True)
+        # Match domain patterns: word.tld or word.word.tld
+        matches = re.findall(
+            r'\b([a-zA-Z0-9][a-zA-Z0-9\-]*\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?)\b',
+            text
         )
-        page = browser.new_page(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/122.0.0.0 Safari/537.36"
-            ),
-            locale="ro-RO",
-        )
+        for m in matches:
+            cleaned = clean_domain(m)
+            if is_valid_domain(cleaned) and '.' in cleaned:
+                domains.add(cleaned)
 
-        print(f"🌐  Loading {SOURCE_URL} ...")
-        try:
-            page.goto(SOURCE_URL, wait_until="networkidle", timeout=60_000)
-        except Exception as e:
-            print(f"    ⚠️  networkidle timeout — continuing anyway ({e})")
+    # Filter: keep only plausible gambling domains, exclude nav/UI/system domains
+    EXCLUDE = {
+        'onjn.gov.ro', 'gov.ro', 'wordpress.com', 'facebook.com', 'twitter.com',
+        'youtube.com', 'instagram.com', 'linkedin.com', 'google.com', 'microsoft.com',
+        'jquery.com', 'bootstrapcdn.com', 'cloudflare.com', 'gravatar.com',
+        'wp.com', 'w3.org', 'schema.org', 'bit.ly', 'goo.gl'
+    }
 
-        # Extra wait for JS challenge to complete and page to render
-        print(f"⏳  Waiting {PAGE_WAIT_MS}ms for challenge + render...")
-        page.wait_for_timeout(PAGE_WAIT_MS)
+    result = sorted(
+        d for d in domains
+        if d not in EXCLUDE
+        and not any(d.endswith('.' + ex) for ex in EXCLUDE)
+        and not d.endswith('.gov.ro')
+        and not d.endswith('.gov')
+    )
 
-        # Check we actually got a real page (not still on challenge)
-        title = page.title()
-        print(f"    Page title: {title}")
+    return result
 
-        # Wait for a table to appear
-        try:
-            page.wait_for_selector("table", timeout=15_000)
-            print("    ✓ Table detected")
-        except PlaywrightTimeoutError:
-            print("    ⚠️  No table found — page may still be on challenge screen.")
-            # Save debug HTML
-            with open("debug_romania.html", "w", encoding="utf-8") as f:
-                f.write(page.content())
-            print("    💾  Saved debug_romania.html for inspection.")
-            browser.close()
-            return []
-
-        html = page.content()
-        browser.close()
-
-    return extract_urls_from_html(html)
-
-# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     print("=" * 60)
     print("🇷🇴  ROMANIA LICENSED GAMBLING SITES SCRAPER (ONJN)")
     print("=" * 60)
-    print("🌐  Using Playwright/Chromium to bypass JS challenge\n")
 
-    urls = scrape()
-
-    if not urls:
-        print("❌  No URLs found — check debug_romania.html if it was created.")
+    try:
+        html = fetch_page()
+    except Exception as e:
+        print(f"❌  Failed to fetch page: {e}")
         return
 
-    unique = write_canonical_csv(urls, 'romania.csv')
-    print(f"\n📊  Total unique URLs written: {len(unique)}")
+    domains = extract_domains(html)
+    print(f"\n📊  Found {len(domains)} candidate domains")
 
-    if len(unique) < MIN_EXPECTED:
-        print(f"⚠️  Only {len(unique)} — below expected minimum of {MIN_EXPECTED}.")
+    if len(domains) < MIN_EXPECTED:
+        print(f"❌  Below minimum of {MIN_EXPECTED} — page may not have loaded correctly.")
+        print("    First 500 chars of HTML:")
+        print(html[:500])
+        print("\n    Aborting write to protect existing data.")
+        return
 
-    print(f"\n🔍  All URLs:")
-    for u in unique:
-        print(f"    {u}")
+    print("\n🔍  First 15 domains:")
+    for d in domains[:15]:
+        print(f"    {d}")
+    if len(domains) > 15:
+        print(f"    ... and {len(domains) - 15} more")
 
-    print("\n✅  Done.")
+    write_canonical_csv(domains, 'romania.csv')
+    print("✅  Done.")
+
 
 if __name__ == "__main__":
     main()
