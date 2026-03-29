@@ -13,25 +13,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
+      - name: Verify Root Files
+        run: ls -R
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           
-- name: Install Deps
+      - name: Install Deps
         run: |
-          # 1. Update package lists
+          # Fix for Ubuntu 24.04 environment
           sudo apt-get update
           
-          # 2. Install Python packages (Explicitly point to root requirements.txt)
-          # If requirements.txt is in a folder, change the path below
+          # Install Python requirements
+          pip install --upgrade pip
           pip install -r requirements.txt
           
-          # 3. Install Playwright and its specific system dependencies
+          # Install Playwright
           playwright install chromium
-          playwright install-deps chromium
+          # Automated dependency fix for new Ubuntu versions
+          sudo npx playwright install-deps chromium
           
-      # Run the script using the subfolder path
       - name: Run Scraper
         run: python scrapers/fetch_romania.py
         
@@ -40,5 +43,5 @@ jobs:
           git config --global user.name "bot"
           git config --global user.email "bot@users.noreply.github.com"
           git add romania.csv
-          git commit -m "update romania domains [skip ci]" || exit 0
+          git commit -m "update" || exit 0
           git push
