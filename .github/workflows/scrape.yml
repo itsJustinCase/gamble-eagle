@@ -26,6 +26,7 @@ jobs:
           sudo npx playwright install-deps chromium
           
       - name: Run Scraper
+        # We allow a slightly longer timeout here than in the Python script
         run: python scrapers/fetch_romania.py
         
       - name: Upload Debug Screenshot on Failure
@@ -34,6 +35,7 @@ jobs:
         with:
           name: cloudflare-diagnostic
           path: cloudflare_block.png
+          if-no-files-found: warn
         
       - name: Commit and Push
         if: success()
