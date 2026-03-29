@@ -1,6 +1,8 @@
 name: Romania Scraper
+
 on:
   schedule:
+    # Runs every day at midnight
     - cron: '0 0 * * *'
   workflow_dispatch:
 
@@ -8,29 +10,39 @@ jobs:
   run-scraper:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
       
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           
-- name: Install Dependencies
+      - name: Install System Dependencies
         run: |
-          pip install -r requirements.txt
-          # Ensure the package manager is updated before installing system deps
+          # Fix for Ubuntu 24.04 library name changes (libasound2 -> libasound2t64)
           sudo apt-get update
+          
+      - name: Install Python Dependencies
+        run: |
+          # Installs playwright, playwright-stealth, beautifulsoup4, and pytz
+          pip install -r requirements.txt
+          
+      - name: Install Playwright Browsers
+        run: |
+          # Install Chromium and the specific system libraries it needs to run headlessly
           playwright install chromium
-          # Use --with-deps to let Playwright handle the specific library names
           playwright install-deps chromium
           
       - name: Execute Scraper
-        run: python fetch_romania.py
+        # Points to the script inside your 'scrapers/' folder
+        run: python scrapers/fetch_romania.py
         
       - name: Push Results
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          git add romania.csv
-          git commit -m "Update domains [skip ci]" || exit 0
+          # Ensure the CSV is added regardless of which folder it was saved in
+          git add *.csv || git add scrapers/*.csv
+          git commit -m "Update Romania domains [skip ci]" || exit 0
           git push
