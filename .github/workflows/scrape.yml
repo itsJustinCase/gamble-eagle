@@ -13,35 +13,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Verify Root Files
-        run: ls -R
-      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           
-      - name: Install Deps
+      - name: Install Dependencies
         run: |
-          # Fix for Ubuntu 24.04 environment
           sudo apt-get update
-          
-          # Install Python requirements
-          pip install --upgrade pip
           pip install -r requirements.txt
-          
-          # Install Playwright
           playwright install chromium
-          # Automated dependency fix for new Ubuntu versions
           sudo npx playwright install-deps chromium
           
       - name: Run Scraper
         run: python scrapers/fetch_romania.py
         
+      - name: Upload Debug Screenshot on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-diagnostic
+          path: cloudflare_block.png
+        
       - name: Commit and Push
+        if: success()
         run: |
           git config --global user.name "bot"
           git config --global user.email "bot@users.noreply.github.com"
           git add romania.csv
-          git commit -m "update" || exit 0
+          git commit -m "update romania domains [skip ci]" || exit 0
           git push
