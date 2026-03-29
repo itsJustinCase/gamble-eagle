@@ -15,10 +15,13 @@ jobs:
         with:
           python-version: '3.10'
           
-      - name: Install Dependencies
+- name: Install Dependencies
         run: |
           pip install -r requirements.txt
+          # Ensure the package manager is updated before installing system deps
+          sudo apt-get update
           playwright install chromium
+          # Use --with-deps to let Playwright handle the specific library names
           playwright install-deps chromium
           
       - name: Execute Scraper
