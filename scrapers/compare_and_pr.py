@@ -32,7 +32,8 @@ BASE_BRANCH = "main"
 
 # CSVs to check: local filename → path in the GitHub repo
 CSV_FILES = {
-    "france.csv":      "france.csv",
+    "france.csv":           "france.csv",
+    "france_blacklist.csv": "france_blacklist.csv",
     "spain.csv":       "spain.csv",
     "denmark.csv":     "denmark.csv",
     "sweden.csv":      "sweden.csv",

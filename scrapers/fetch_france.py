@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """
-Fetch France Gambling Sites - ALL .fr URLs
-Extracts EVERY .fr domain from the page
+France Licensed Gambling Sites Scraper
+=======================================
+Source: Autorité Nationale des Jeux (ANJ)
+        https://anj.fr/offre-de-jeu-et-marche/operateurs-agrees
+
+Extracts all .fr gambling domains from the ANJ licensed operators page.
+Outputs: france.csv (canonical format — timestamp on line 1, one domain per line)
 """
 
+import re
 import requests
 from bs4 import BeautifulSoup
-import re
 from datetime import datetime
+
 try:
     from zoneinfo import ZoneInfo
     _PARIS = ZoneInfo('Europe/Paris')
@@ -19,95 +25,79 @@ except ImportError:
     def _paris_now():
         return datetime.now(_PARIS)
 
+LICENSED_URL = "https://anj.fr/offre-de-jeu-et-marche/operateurs-agrees"
+MIN_EXPECTED = 5
+EXCLUDED     = {'anj.fr', 'service-public.fr', 'gov.fr', 'legifrance.gouv.fr'}
 
-def write_canonical_csv(urls, filepath):
-    """
-    Write the canonical GambleEagle CSV format:
-      Line 1: datetime stamp in Paris time — YYYYMMDD HH:MM
-      Lines 2+: one clean URL per line, no header, no extra columns.
-    URLs must already be clean (no http://, no www.).
-    Trailing slashes preserved as-is.
-    """
+HEADERS = {
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/122.0.0.0 Safari/537.36'
+    )
+}
+
+
+def write_canonical_csv(domains, filepath):
     stamp = _paris_now().strftime('%Y%m%d %H:%M')
     with open(filepath, 'w', newline='', encoding='utf-8') as f:
         f.write(stamp + '\n')
-        for url in urls:
-            f.write(url.strip() + '\n')
-    print(f"💾  Saved {len(urls)} URLs → {filepath}  (stamp: {stamp})")
+        for d in sorted(set(domains)):
+            f.write(d.strip() + '\n')
+    print(f"💾  Saved {len(domains)} domains → {filepath}  (stamp: {stamp})")
 
-def extract_all_fr_urls():
-    """
-    Extract ALL .fr domains from the ANJ page
-    """
-    url = "https://anj.fr/offre-de-jeu-et-marche/operateurs-agrees"
-    
-    try:
-        print("🔍 Connecting to ANJ France website...")
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        print("✅ Page loaded successfully")
-        
-        # Parse HTML
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        print("🔍 Extracting ALL .fr URLs from the entire page...")
-        
-        # Get ALL text content
-        all_text = soup.get_text()
-        
-        # Extract EVERY .fr domain from the entire page.
-        # The regex anchors on a word boundary at the start to avoid
-        # picking up prefixes like =- from surrounding text (e.g. "=-zeturf.fr").
-        all_fr_domains = re.findall(r'(?<![a-zA-Z0-9])([a-zA-Z0-9][a-zA-Z0-9.-]*\.fr)', all_text)
-        
-        # Remove duplicates and filter out non-gambling domains
-        domains = set()
-        excluded = ['anj.fr', 'service-public.fr', 'gov.fr']
-        
-        for domain in all_fr_domains:
-            domain_lower = domain.lower()
-            if not any(excluded_domain in domain_lower for excluded_domain in excluded):
-                domains.add(domain_lower)
-        
-        # Sort for consistency
-        sorted_domains = sorted(domains)
-        
-        return sorted_domains
-        
-    except requests.RequestException as e:
-        print(f"❌ Error fetching the page: {e}")
-        return []
-    except Exception as e:
-        print(f"❌ Error parsing the page: {e}")
-        return []
+
+def clean_domain(raw):
+    d = raw.strip().lower()
+    d = re.sub(r'^https?://', '', d)
+    d = re.sub(r'^www\.', '', d)
+    return d.rstrip('/')
+
+
+def fetch_licensed():
+    print(f"🌐  Fetching ANJ licensed operators page...")
+    resp = requests.get(LICENSED_URL, headers=HEADERS, timeout=15)
+    resp.raise_for_status()
+    print(f"    ✅  HTTP {resp.status_code}")
+
+    soup = BeautifulSoup(resp.content, 'html.parser')
+    all_text = soup.get_text()
+
+    raw_domains = re.findall(r'(?<![a-zA-Z0-9])([a-zA-Z0-9][a-zA-Z0-9.-]*\.fr)', all_text)
+
+    domains = set()
+    for d in raw_domains:
+        cleaned = clean_domain(d)
+        if not any(ex in cleaned for ex in EXCLUDED):
+            domains.add(cleaned)
+
+    result = sorted(domains)
+    print(f"    📊  Found {len(result)} licensed .fr domains")
+    return result
+
 
 def main():
-    """Main function"""
     print("=" * 60)
-    print("🇫🇷 FRANCE GAMBLING SITES - ALL .fr URLs")
+    print("🇫🇷  FRANCE — Licensed Operators (ANJ)")
     print("=" * 60)
-    print("🌐 Source: https://anj.fr/offre-de-jeu-et-marche/operateurs-agrees")
-    
-    # Extract domains
-    french_domains = extract_all_fr_urls()
-    
-    if not french_domains:
-        print("❌ No domains found.")
+
+    try:
+        licensed = fetch_licensed()
+    except Exception as e:
+        print(f"❌  Failed to fetch licensed list: {e}")
         return
-    
-    print(f"\n🎯 Found {len(french_domains)} .fr domains:")
-    print("=" * 50)
-    
-    for i, domain in enumerate(french_domains, 1):
-        print(f"{i:2d}. {domain}")
-    
-    write_canonical_csv(french_domains, 'france.csv')
-    print(f"📊 Total .fr domains: {len(french_domains)}")
-    print("✅ Extraction complete!")
+
+    if not licensed:
+        print("❌  No domains found — not writing france.csv")
+        return
+
+    if len(licensed) < MIN_EXPECTED:
+        print(f"❌  Only {len(licensed)} domains — below minimum of {MIN_EXPECTED}, not writing")
+        return
+
+    write_canonical_csv(licensed, 'france.csv')
+    print("✅  Done.")
+
 
 if __name__ == "__main__":
     main()
