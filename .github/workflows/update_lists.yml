@@ -6,7 +6,7 @@ on:
   # To test at high cadence change to e.g. "0 * * * *" (every hour).
   # Cron syntax: minute hour day-of-month month day-of-week
   schedule:
-    - cron: "0 8,20 * * *"
+    - cron: "0 8 */10 * *"
 
   # ── Manual trigger ───────────────────────────────────────────────────────────
   # Lets you run the workflow from the GitHub Actions tab at any time,
@@ -89,13 +89,22 @@ jobs:
             done
           fi
 
-      # ── 5. Verify CSVs were produced ─────────────────────────────────────────
+      # ── 5. Upload debug artifacts (if any scraper produced them) ─────────────
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-debug
+          path: scrapers/debug_*.html
+          if-no-files-found: ignore
+
+      # ── 6. Verify CSVs were produced ─────────────────────────────────────────
       - name: Verify CSVs produced
         run: |
           echo "CSVs in scrapers/:"
           ls -lh scrapers/*.csv 2>/dev/null || echo "  (none found)"
 
-      # ── 6. Compare and open PR ───────────────────────────────────────────────
+      # ── 7. Compare and open PR ───────────────────────────────────────────────
       - name: Compare and open PR
         id: compare
         env:
