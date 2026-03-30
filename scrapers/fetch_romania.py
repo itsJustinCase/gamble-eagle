@@ -180,25 +180,35 @@ def scrape():
 
         print(f"🌐  Loading {SOURCE_URL} ...")
         try:
-            page.goto(SOURCE_URL, wait_until="networkidle", timeout=60_000)
+            page.goto(SOURCE_URL, wait_until="domcontentloaded", timeout=60_000)
         except Exception as e:
-            print(f"    ⚠️  networkidle timeout — continuing anyway ({e})")
+            print(f"    ⚠️  Initial load timeout — continuing ({e})")
 
-        # Extra wait for JS challenge to complete and page to render
-        print(f"⏳  Waiting {PAGE_WAIT_MS}ms for challenge + render...")
+        # Cloudflare challenge triggers a redirect — wait for it to fully settle.
+        # We wait for load state rather than calling page.title() immediately.
+        print(f"⏳  Waiting for page to settle after any challenge redirect...")
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=30_000)
+        except Exception:
+            pass
+
+        # Additional fixed wait for JS rendering
         page.wait_for_timeout(PAGE_WAIT_MS)
 
-        # Check we actually got a real page (not still on challenge)
-        title = page.title()
-        print(f"    Page title: {title}")
+        # Safe title read — wrapped so a mid-navigation context destruction doesn't crash
+        try:
+            title = page.title()
+            print(f"    Page title: {title}")
+        except Exception as e:
+            print(f"    ⚠️  Could not read page title ({e}) — continuing anyway")
+            title = ""
 
         # Wait for a table to appear
         try:
-            page.wait_for_selector("table", timeout=15_000)
+            page.wait_for_selector("table", timeout=20_000)
             print("    ✓ Table detected")
         except PlaywrightTimeoutError:
             print("    ⚠️  No table found — page may still be on challenge screen.")
-            # Save debug HTML
             with open("debug_romania.html", "w", encoding="utf-8") as f:
                 f.write(page.content())
             print("    💾  Saved debug_romania.html for inspection.")
