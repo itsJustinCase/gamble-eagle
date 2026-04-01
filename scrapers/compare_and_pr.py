@@ -32,23 +32,23 @@ BASE_BRANCH = "main"
 
 # CSVs to check: local filename → path in the GitHub repo
 CSV_FILES = {
-    "france.csv":           "france.csv",
-    "france_blacklist.csv": "france_blacklist.csv",
-    "spain.csv":       "spain.csv",
-    "denmark.csv":     "denmark.csv",
-    "sweden.csv":      "sweden.csv",
-    "netherlands.csv": "netherlands.csv",
-    "ontario.csv":     "ontario.csv",
-    "brazil.csv":      "brazil.csv",
-    "NJ.csv":          "NJ.csv",
-    "MI.csv":          "MI.csv",
     "australia.csv":           "australia.csv",
     "australia_blacklist.csv": "australia_blacklist.csv",
+    "brazil.csv":      "brazil.csv",
+    "denmark.csv":     "denmark.csv",
+    "france.csv":           "france.csv",
+    "france_blacklist.csv": "france_blacklist.csv",
     "greece.csv":           "greece.csv",
     "greece_blacklist.csv": "greece_blacklist.csv",
-    "portugal.csv":    "portugal.csv",
-    "romania.csv":     "romania.csv",
+    "netherlands.csv": "netherlands.csv",
+    "ontario.csv":     "ontario.csv",
+    "NJ.csv":          "NJ.csv",
+    "MI.csv":          "MI.csv",    
+    "portugal.csv":    "portugal.csv",    
+    "spain.csv":       "spain.csv",
+    "sweden.csv":      "sweden.csv",
     "UK.csv":          "UK.csv",
+    "romania.csv":     "romania.csv",
 }
 
 GITHUB_API  = "https://api.github.com"
