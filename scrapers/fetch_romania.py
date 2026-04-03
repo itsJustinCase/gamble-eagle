@@ -40,7 +40,7 @@ except ImportError:
 
 SOURCE_URL   = "https://onjn-gov-ro.translate.goog/licentiati-clasa-i/?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en&_x_tr_pto=wapp"
 MIN_EXPECTED = 5
-PAGE_WAIT_MS = 120000    # generous wait for challenge + page render
+PAGE_WAIT_MS = 10000    # generous wait for challenge + page render
 
 # Domains to exclude — government/admin sites that appear in address text
 EXCLUDED_DOMAINS = {
