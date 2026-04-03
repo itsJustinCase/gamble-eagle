@@ -34,7 +34,7 @@ except ImportError:
 
 SOURCE_URL   = "https://onjn-gov-ro.translate.goog/lista-neagra/?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en&_x_tr_pto=wapp"
 MIN_EXPECTED = 10
-PAGE_WAIT_MS = 120000
+PAGE_WAIT_MS = 10000
 
 
 def write_canonical_csv(domains, filepath):
