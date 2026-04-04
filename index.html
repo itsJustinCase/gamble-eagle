@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamble Eagle Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #020617; color: #f1f5f9; }
+        .card { background: #0f172a; border: 2px solid #1e293b; }
+    </style>
+</head>
+<body class="p-6 md:p-12">
+    <header class="max-w-7xl mx-auto mb-12">
+        <h1 class="text-4xl font-extrabold tracking-tight text-white uppercase">Gamble-Eagle Index</h1>
+    </header>
+
+    <div id="stats" class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+        </div>
+
+    <script>
+        const REPO = "itsJustinCase/gamble-eagle";
+        const BRANCH = "main";
+        
+        const SOURCE_LINKS = {
+            'Australia': { white: "https://www.acma.gov.au/check-if-gambling-operator-legal", black: "https://www.acma.gov.au/protect-yourself-illegal-gambling-operators" },
+            'Brazil': { white: "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/lista-de-empresas/confira-a-lista-de-empresas-autorizadas-a-ofertar-apostas-de-quota-fixa-em-2025" },
+            'Canada (Ontario)': { white: "https://igamingontario.ca/en/player/regulated-igaming-market" },
+            'Denmark': { white: "https://www.spillemyndigheden.dk/tilladelsesindehavere" },
+            'France': { white: "https://anj.fr/offre-de-jeu-et-marche/operateurs-agrees", black: "https://anj.fr/liste-noire-des-sites-de-jeux-dargent-et-de-hasard-interdits-en-france" },
+            'Greece': { white: "https://certifications.gamingcommission.gov.gr/publicRecordsOnline/SitePages/KatoxoiAdeiasOnline.aspx", black: "https://www.gamingcommission.gov.gr/images/epopteia-kai-elegxos/blacklist/blacklist.xlsx" },
+            'Netherlands': { white: "https://kansspelautoriteit.nl/veilig-spelen/kansspelwijzer/" },
+            'Portugal': { white: "https://www.srij.turismodeportugal.pt/pt/jogos-e-apostas-online/entidades-licenciadas" },
+            'Romania': { white: "https://onjn.gov.ro/licentiati-clasa-i/", black: "https://onjn.gov.ro/wp-content/uploads/Onjn.gov.ro/Acasa/BlackList/Lista-neagra.txt" },
+            'Spain': { white: "https://www.ordenacionjuego.es/operadores-juego/operadores-licencia/operadores" },
+            'Sweden': { white: "https://www.spelinspektionen.se/licens-o-tillstand/licensregister/?page=1" },
+            'United Kingdom': { white: "https://www.gamblingcommission.gov.uk/public-register/businesses/download" },
+            'US Arizona': { white: "https://gaming.az.gov/checkyourbet" },
+            'US Michigan': { white: "https://www.michigan.gov/mgcb/internet-gaming-and-fantasy-contests/authorized-online-gaming-and-sports-betting-platform-providers-in-michigan" },
+            'US New Jersey': { white: "https://www.njoag.gov/about/divisions-and-offices/division-of-gaming-enforcement-home/responsible-gaming-main/#AuthorizedInNJ2" }
+        };
+
+        const FILES = [
+            { id: 'Australia', whitelist: 'australia.csv', blacklist: 'australia_blacklist.csv' },
+            { id: 'Brazil', whitelist: 'brazil.csv', blacklist: 'brazil_blacklist.csv' },
+            { id: 'Canada (Ontario)', whitelist: 'ontario.csv' },
+            { id: 'Denmark', whitelist: 'denmark.csv' },
+            { id: 'France', whitelist: 'france.csv', blacklist: 'france_blacklist.csv' },
+            { id: 'Greece', whitelist: 'greece.csv', blacklist: 'greece_blacklist.csv' },
+            { id: 'Netherlands', whitelist: 'netherlands.csv' },
+            { id: 'Portugal', whitelist: 'portugal.csv' },
+            { id: 'Romania', whitelist: 'romania.csv', blacklist: 'romania_blacklist.csv' },
+            { id: 'Spain', whitelist: 'spain.csv' },
+            { id: 'Sweden', whitelist: 'sweden.csv' },
+            { id: 'United Kingdom', whitelist: 'UK.csv' },
+            { id: 'US Arizona', whitelist: 'AZ.csv' },
+            { id: 'US Michigan', whitelist: 'MI.csv' },
+            { id: 'US New Jersey', whitelist: 'NJ.csv' }
+        ];
+
+        async function fetchWithPersistence(item) {
+            const storageKey = `date_${item.whitelist}`;
+            const rawUrl = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${item.whitelist}`;
+            const apiUrl = `https://api.github.com/repos/${REPO}/commits?path=${item.whitelist}&sha=${BRANCH}&per_page=1`;
+            
+            let count = 0;
+            let blackCount = null;
+            let dateStr = localStorage.getItem(storageKey) || "Awaiting Sync...";
+            let isCached = true;
+
+            try {
+                const contentRes = await fetch(rawUrl);
+                if (contentRes.ok) {
+                    const text = await contentRes.text();
+                    count = text.trim().split('\n').filter(l => l.trim().length > 0).length - 1;
+                }
+
+                if (item.blacklist) {
+                    const blackRes = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/${item.blacklist}`);
+                    if (blackRes.ok) {
+                        const bText = await blackRes.text();
+                        blackCount = bText.trim().split('\n').filter(l => l.trim().length > 0).length - 1;
+                    }
+                }
+
+                const commitRes = await fetch(apiUrl);
+                if (commitRes.ok) {
+                    const commitData = await commitRes.json();
+                    if (commitData && commitData[0]) {
+                        const freshDate = new Date(commitData[0].commit.committer.date).toLocaleDateString('en-GB', { 
+                            day: 'numeric', month: 'long', year: 'numeric' 
+                        });
+                        localStorage.setItem(storageKey, freshDate);
+                        dateStr = freshDate;
+                        isCached = false;
+                    }
+                }
+            } catch (e) { console.error(e); }
+
+            return { count, blackCount, date: dateStr, isCached };
+        }
+
+        async function init() {
+            const container = document.getElementById('stats');
+            
+            for (const item of FILES) {
+                const data = await fetchWithPersistence(item);
+                const links = SOURCE_LINKS[item.id] || {};
+                const card = document.createElement('div');
+                card.className = 'card p-8 rounded-2xl shadow-2xl flex flex-col justify-between';
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="mb-8">
+                            <h2 class="text-3xl font-extrabold text-white uppercase tracking-tight leading-none">${item.id}</h2>
+                            <div class="mt-4 flex flex-col gap-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-bold text-slate-500 uppercase tracking-widest">Last Updated</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${data.isCached ? 'bg-amber-900/40 text-amber-500' : 'bg-blue-900/40 text-blue-400'}">
+                                        ${data.isCached ? 'Cached' : 'Synced'}
+                                    </span>
+                                </div>
+                                <span class="text-2xl text-blue-400 font-bold tracking-tight">${data.date}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 gap-4">
+                            <a href="${links.white || '#'}" target="_blank" class="group flex justify-between items-center bg-slate-800/40 p-5 rounded-xl border border-slate-700/50 hover:bg-slate-800 transition-colors">
+                                <span class="text-lg font-bold uppercase text-slate-300 group-hover:text-white">Whitelist</span>
+                                <span class="text-5xl font-black text-green-400 leading-none">${data.count.toLocaleString()}</span>
+                            </a>
+                            
+                            ${data.blackCount !== null ? `
+                            <a href="${links.black || '#'}" target="_blank" class="group flex justify-between items-center bg-slate-800/40 p-5 rounded-xl border border-slate-700/50 hover:bg-slate-800 transition-colors">
+                                <span class="text-lg font-bold uppercase text-slate-300 group-hover:text-white">Blacklist</span>
+                                <span class="text-5xl font-black text-red-500 leading-none">${data.blackCount.toLocaleString()}</span>
+                            </a>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <div class="mt-8">
+                        <a href="https://github.com/${REPO}/blob/${BRANCH}/${item.whitelist}" 
+                           target="_blank" 
+                           class="block text-center py-4 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-bold text-white transition-all border border-slate-700">
+                           VIEW RAW REPO SOURCE
+                        </a>
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
