@@ -23,6 +23,7 @@
         const REPO = "itsJustinCase/gamble-eagle";
         const BRANCH = "main";
         
+        // Data mapped from background.js and user-provided links
         const SOURCE_LINKS = {
             'Australia': { white: "https://www.acma.gov.au/check-if-gambling-operator-legal", black: "https://www.acma.gov.au/protect-yourself-illegal-gambling-operators" },
             'Brazil': { white: "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/lista-de-empresas/confira-a-lista-de-empresas-autorizadas-a-ofertar-apostas-de-quota-fixa-em-2025" },
@@ -59,23 +60,25 @@
             { id: 'US New Jersey', whitelist: 'NJ.csv' }
         ];
 
-        async function fetchWithPersistence(item) {
-            const storageKey = `date_${item.whitelist}`;
+        async function fetchFileData(item) {
+            const storageKey = `meta_${item.id}`;
             const rawUrl = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${item.whitelist}`;
+            // This API call specifically targets the '2 weeks ago' style commit timestamp
             const apiUrl = `https://api.github.com/repos/${REPO}/commits?path=${item.whitelist}&sha=${BRANCH}&per_page=1`;
             
             let count = 0;
             let blackCount = null;
-            let dateStr = localStorage.getItem(storageKey) || "Awaiting Sync...";
-            let isCached = true;
+            let cached = JSON.parse(localStorage.getItem(storageKey)) || { date: "Syncing..." };
 
             try {
+                // Fetch Whitelist Count
                 const contentRes = await fetch(rawUrl);
                 if (contentRes.ok) {
                     const text = await contentRes.text();
                     count = text.trim().split('\n').filter(l => l.trim().length > 0).length - 1;
                 }
 
+                // Fetch Blacklist Count
                 if (item.blacklist) {
                     const blackRes = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/${item.blacklist}`);
                     if (blackRes.ok) {
@@ -84,6 +87,7 @@
                     }
                 }
 
+                // Fetch Commit Metadata (The "2 weeks ago" source)
                 const commitRes = await fetch(apiUrl);
                 if (commitRes.ok) {
                     const commitData = await commitRes.json();
@@ -91,21 +95,20 @@
                         const freshDate = new Date(commitData[0].commit.committer.date).toLocaleDateString('en-GB', { 
                             day: 'numeric', month: 'long', year: 'numeric' 
                         });
-                        localStorage.setItem(storageKey, freshDate);
-                        dateStr = freshDate;
-                        isCached = false;
+                        cached = { date: freshDate, isFresh: true };
+                        localStorage.setItem(storageKey, JSON.stringify(cached));
                     }
                 }
             } catch (e) { console.error(e); }
 
-            return { count, blackCount, date: dateStr, isCached };
+            return { count, blackCount, date: cached.date, isFresh: cached.isFresh };
         }
 
         async function init() {
             const container = document.getElementById('stats');
             
             for (const item of FILES) {
-                const data = await fetchWithPersistence(item);
+                const data = await fetchFileData(item);
                 const links = SOURCE_LINKS[item.id] || {};
                 const card = document.createElement('div');
                 card.className = 'card p-8 rounded-2xl shadow-2xl flex flex-col justify-between';
@@ -116,9 +119,9 @@
                             <h2 class="text-3xl font-extrabold text-white uppercase tracking-tight leading-none">${item.id}</h2>
                             <div class="mt-4 flex flex-col gap-1">
                                 <div class="flex items-center gap-2">
-                                    <span class="text-sm font-bold text-slate-500 uppercase tracking-widest">Last Updated</span>
-                                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${data.isCached ? 'bg-amber-900/40 text-amber-500' : 'bg-blue-900/40 text-blue-400'}">
-                                        ${data.isCached ? 'Cached' : 'Synced'}
+                                    <span class="text-sm font-bold text-slate-500 uppercase tracking-widest">Last Modified</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${data.isFresh ? 'bg-blue-900/40 text-blue-400' : 'bg-amber-900/40 text-amber-500'}">
+                                        ${data.isFresh ? 'Live' : 'Cached'}
                                     </span>
                                 </div>
                                 <span class="text-2xl text-blue-400 font-bold tracking-tight">${data.date}</span>
@@ -144,7 +147,7 @@
                         <a href="https://github.com/${REPO}/blob/${BRANCH}/${item.whitelist}" 
                            target="_blank" 
                            class="block text-center py-4 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-bold text-white transition-all border border-slate-700">
-                           VIEW RAW REPO SOURCE
+                           VIEW REPO SOURCE
                         </a>
                     </div>
                 `;
