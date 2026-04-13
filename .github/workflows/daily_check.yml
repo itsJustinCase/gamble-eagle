@@ -2,7 +2,7 @@ name: Monitor API Changes
 
 on:
   schedule:
-    - cron: '0 15 * * *' # 15:00 UTC Daily
+    - cron: '0 5,15 * * *' # 15:00 UTC Daily
   workflow_dispatch: # Allows manual trigger
 
 jobs:
