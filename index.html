@@ -39,7 +39,8 @@
             'United Kingdom': { white: "https://www.gamblingcommission.gov.uk/public-register/businesses/download" },
             'US Arizona': { white: "https://gaming.az.gov/checkyourbet" },
             'US Michigan': { white: "https://www.michigan.gov/mgcb/internet-gaming-and-fantasy-contests/authorized-online-gaming-and-sports-betting-platform-providers-in-michigan" },
-            'US New Jersey': { white: "https://www.njoag.gov/about/divisions-and-offices/division-of-gaming-enforcement-home/responsible-gaming-main/#AuthorizedInNJ2" }
+            'US New Jersey': { white: "https://www.njoag.gov/about/divisions-and-offices/division-of-gaming-enforcement-home/responsible-gaming-main/#AuthorizedInNJ2" },
+            'Ukraine': { white: "https://monitoring.pc.gov.ua/", black: "https://monitoring.pc.gov.ua/"}
         };
 
         const FILES = [
@@ -57,7 +58,8 @@
             { id: 'United Kingdom', whitelist: 'UK.csv' },
             { id: 'US Arizona', whitelist: 'AZ.csv' },
             { id: 'US Michigan', whitelist: 'MI.csv' },
-            { id: 'US New Jersey', whitelist: 'NJ.csv' }
+            { id: 'US New Jersey', whitelist: 'NJ.csv' },
+            { id: 'Ukraine', whitelist: 'ukraine.csv', blacklist: 'ukraine_blacklist.csv' }
         ];
 
         async function fetchFileData(item) {
