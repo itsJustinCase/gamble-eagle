@@ -6,7 +6,7 @@ on:
   # To test at high cadence change to e.g. "0 * * * *" (every hour).
   # Cron syntax: minute hour day-of-month month day-of-week
   schedule:
-    - cron: "0 5,14,22 * * *"
+    - cron: "0 5,15,23 * * *"
 
   # ── Manual trigger ───────────────────────────────────────────────────────────
   # Lets you run the workflow from the GitHub Actions tab at any time,
