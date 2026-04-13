@@ -15,28 +15,32 @@ def monitor():
         print(f"Fetch failed: {e}")
         sys.exit(0)
 
-    # Targeted parameters
+    # DEBUG: Print keys to see the actual structure in GitHub logs
+    print(f"API Response Keys: {list(data.keys())}")
+
+    # Adjusted extraction based on common API patterns
+    # If the keys are different, we will see them in the logs
+    domains = data.get("domains") or data.get("total_domains") or data.get("count")
+    updated = data.get("updated_at") or data.get("last_update") or data.get("date")
+
     current_stats = {
-        "domains": data.get("domains_count"),
-        "last_updated": data.get("last_updated")
+        "domains": domains,
+        "last_updated": updated
     }
 
-    # Load previous state
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
             previous_stats = json.load(f)
     else:
         previous_stats = {}
 
-    # Check for changes
     if current_stats != previous_stats:
         print(f"CHANGE DETECTED: {current_stats}")
         with open(STATE_FILE, "w") as f:
             json.dump(current_stats, f)
-        # Exit with 1 to signal the workflow that a change occurred
         sys.exit(1) 
     else:
-        print("No changes detected.")
+        print("No changes.")
         sys.exit(0)
 
 if __name__ == "__main__":
