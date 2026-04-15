@@ -3,17 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nest</title>
+    <title>Data Eagle Nest</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #020617; color: #f1f5f9; }
         .card { background: #0f172a; border: 2px solid #1e293b; }
+        .toggle-btn { background-color: #1e293b; border: 1px solid #334155; transition: all 0.2s ease; }
+        .toggle-btn:hover { background-color: #334155; border-color: #3b82f6; }
     </style>
 </head>
 <body class="p-6 md:p-12">
-    <header class="max-w-7xl mx-auto mb-12">
-        <h1 class="text-4xl font-extrabold tracking-tight text-white uppercase">Gamble Eagle Nest</h1>
+    <header class="max-w-7xl mx-auto mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <h1 class="text-4xl font-extrabold tracking-tight text-white uppercase">Data Eagle Nest</h1>
+        <button id="sortToggle" class="toggle-btn px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center gap-2">
+            <span>Sort:</span>
+            <span id="sortLabel" class="text-blue-400">Last Modified</span>
+        </button>
     </header>
 
     <div id="stats" class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
@@ -22,8 +28,8 @@
     <script>
         const REPO = "itsJustinCase/gamble-eagle";
         const BRANCH = "main";
+        let currentSort = 'modified'; // Default
         
-        // Data mapped from background.js and user-provided links
         const SOURCE_LINKS = {
             'Australia': { white: "https://www.acma.gov.au/check-if-gambling-operator-legal", black: "https://www.acma.gov.au/protect-yourself-illegal-gambling-operators" },
             'Brazil': { white: "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/lista-de-empresas/confira-a-lista-de-empresas-autorizadas-a-ofertar-apostas-de-quota-fixa-em-2025" },
@@ -62,25 +68,25 @@
             { id: 'Ukraine', whitelist: 'ukraine.csv', blacklist: 'ukraine_blacklist.csv' }
         ];
 
+        let cardData = [];
+
         async function fetchFileData(item) {
             const storageKey = `meta_${item.id}`;
             const rawUrl = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${item.whitelist}`;
-            // This API call specifically targets the '2 weeks ago' style commit timestamp
             const apiUrl = `https://api.github.com/repos/${REPO}/commits?path=${item.whitelist}&sha=${BRANCH}&per_page=1`;
             
             let count = 0;
             let blackCount = null;
-            let cached = JSON.parse(localStorage.getItem(storageKey)) || { date: "Syncing..." };
+            let timestamp = 0;
+            let cached = JSON.parse(localStorage.getItem(storageKey)) || { date: "Syncing...", timestamp: 0 };
 
             try {
-                // Fetch Whitelist Count
                 const contentRes = await fetch(rawUrl);
                 if (contentRes.ok) {
                     const text = await contentRes.text();
                     count = text.trim().split('\n').filter(l => l.trim().length > 0).length - 1;
                 }
 
-                // Fetch Blacklist Count
                 if (item.blacklist) {
                     const blackRes = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/${item.blacklist}`);
                     if (blackRes.ok) {
@@ -89,36 +95,53 @@
                     }
                 }
 
-                // Fetch Commit Metadata (The "2 weeks ago" source)
                 const commitRes = await fetch(apiUrl);
                 if (commitRes.ok) {
                     const commitData = await commitRes.json();
                     if (commitData && commitData[0]) {
-                        const freshDate = new Date(commitData[0].commit.committer.date).toLocaleDateString('en-GB', { 
+                        const rawDate = commitData[0].commit.committer.date;
+                        timestamp = new Date(rawDate).getTime();
+                        const freshDate = new Date(rawDate).toLocaleDateString('en-GB', { 
                             day: 'numeric', month: 'long', year: 'numeric' 
                         });
-                        cached = { date: freshDate, isFresh: true };
+                        cached = { date: freshDate, isFresh: true, timestamp: timestamp };
                         localStorage.setItem(storageKey, JSON.stringify(cached));
                     }
                 }
             } catch (e) { console.error(e); }
 
-            return { count, blackCount, date: cached.date, isFresh: cached.isFresh };
+            return { 
+                ...item,
+                count, 
+                blackCount, 
+                date: cached.date, 
+                isFresh: cached.isFresh,
+                timestamp: cached.timestamp || 0 
+            };
         }
 
-        async function init() {
+        function renderCards() {
             const container = document.getElementById('stats');
             
-            for (const item of FILES) {
-                const data = await fetchFileData(item);
-                const links = SOURCE_LINKS[item.id] || {};
+            const sorted = [...cardData].sort((a, b) => {
+                if (currentSort === 'modified') {
+                    // Sort by timestamp. If identical, sort alphabetically.
+                    if (b.timestamp !== a.timestamp) return b.timestamp - a.timestamp;
+                    return a.id.localeCompare(b.id);
+                }
+                // Alphabetical A-Z
+                return a.id.localeCompare(b.id);
+            });
+
+            container.innerHTML = '';
+            sorted.forEach(data => {
+                const links = SOURCE_LINKS[data.id] || {};
                 const card = document.createElement('div');
                 card.className = 'card p-8 rounded-2xl shadow-2xl flex flex-col justify-between';
-                
                 card.innerHTML = `
                     <div>
                         <div class="mb-8">
-                            <h2 class="text-3xl font-extrabold text-white uppercase tracking-tight leading-none">${item.id}</h2>
+                            <h2 class="text-3xl font-extrabold text-white uppercase tracking-tight leading-none">${data.id}</h2>
                             <div class="mt-4 flex flex-col gap-1">
                                 <div class="flex items-center gap-2">
                                     <span class="text-sm font-bold text-slate-500 uppercase tracking-widest">Last Modified</span>
@@ -129,13 +152,11 @@
                                 <span class="text-2xl text-blue-400 font-bold tracking-tight">${data.date}</span>
                             </div>
                         </div>
-                        
                         <div class="grid grid-cols-1 gap-4">
                             <a href="${links.white || '#'}" target="_blank" class="group flex justify-between items-center bg-slate-800/40 p-5 rounded-xl border border-slate-700/50 hover:bg-slate-800 transition-colors">
                                 <span class="text-lg font-bold uppercase text-slate-300 group-hover:text-white">Whitelist</span>
                                 <span class="text-5xl font-black text-green-400 leading-none">${data.count.toLocaleString()}</span>
                             </a>
-                            
                             ${data.blackCount !== null ? `
                             <a href="${links.black || '#'}" target="_blank" class="group flex justify-between items-center bg-slate-800/40 p-5 rounded-xl border border-slate-700/50 hover:bg-slate-800 transition-colors">
                                 <span class="text-lg font-bold uppercase text-slate-300 group-hover:text-white">Blacklist</span>
@@ -144,9 +165,8 @@
                             ` : ''}
                         </div>
                     </div>
-
                     <div class="mt-8">
-                        <a href="https://github.com/${REPO}/blob/${BRANCH}/${item.whitelist}" 
+                        <a href="https://github.com/${REPO}/blob/${BRANCH}/${data.whitelist}" 
                            target="_blank" 
                            class="block text-center py-4 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-bold text-white transition-all border border-slate-700">
                            VIEW REPO SOURCE
@@ -154,7 +174,19 @@
                     </div>
                 `;
                 container.appendChild(card);
-            }
+            });
+        }
+
+        async function init() {
+            const promises = FILES.map(item => fetchFileData(item));
+            cardData = await Promise.all(promises);
+            renderCards();
+
+            document.getElementById('sortToggle').addEventListener('click', () => {
+                currentSort = (currentSort === 'modified') ? 'alpha' : 'modified';
+                document.getElementById('sortLabel').innerText = (currentSort === 'modified') ? 'Last Modified' : 'A > Z';
+                renderCards();
+            });
         }
 
         init();
