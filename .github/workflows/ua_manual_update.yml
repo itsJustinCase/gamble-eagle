@@ -1,0 +1,30 @@
+name: UA - Manual List Update
+
+on:
+  workflow_dispatch:
+
+jobs:
+  process-ua:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run UA Processor
+        run: python UA/process_ukraine.py
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add ukraine.csv ukraine_blacklist.csv
+          # Only push if the processed files actually changed
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Manual update: Ukraine lists" && git push)
