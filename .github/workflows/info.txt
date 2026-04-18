@@ -1,1 +1,0 @@
- runs every 10 days at 08:00 UTC (09:00/10:00 Paris), or manually from the Actions tab where you can specify which scrapers to run by name
