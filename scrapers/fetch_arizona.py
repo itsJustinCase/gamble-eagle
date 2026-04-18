@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-US New Jersey Licensed Gambling Sites Scraper
-==============================================
-Source: NJ Division of Gaming Enforcement (DGE)
-        https://www.njoag.gov/about/divisions-and-offices/
-        division-of-gaming-enforcement-home/sports-wagering/
+US Arizona Licensed Gambling Sites Scraper
+===========================================
+Source: Arizona Department of Gaming (ADG)
+        https://gaming.az.gov/checkyourbet
 
-Extracts URLs from plain-text <td> cells towards the end of the page.
-These are bare URL strings (e.g. https://sportsbook.fanatics.com/) not
-wrapped in <a> tags. Trailing slashes are preserved as-is.
+The CheckYourBet page lists authorised sports betting operators and their URLs.
+Extracts all off-site links from operator entries, stripping protocol and www.
+Preserves paths (e.g. az.betmgm.com/en/sports).
 Single page — no pagination needed.
+Retries up to MAX_RETRIES times on failure.
 """
 
 import re
+import time
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -30,13 +31,17 @@ except ImportError:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-SOURCE_URL  = (
-    "https://www.njoag.gov/about/divisions-and-offices/"
-    "division-of-gaming-enforcement-home/sports-wagering/"
-)
+SOURCE_URL   = "https://gaming.az.gov/checkyourbet"
 MIN_EXPECTED = 5
 MAX_RETRIES  = 5
 RETRY_DELAY  = 5
+
+# Domains to exclude — the regulator site itself and common nav/footer links
+EXCLUDED_DOMAINS = [
+    "gaming.az.gov",
+    "az.gov",
+    "problemgambling.az.gov",
+]
 
 HEADERS = {
     "User-Agent": (
@@ -60,28 +65,18 @@ def write_canonical_csv(urls, filepath):
 # ── URL cleaner ───────────────────────────────────────────────────────────────
 
 def clean_url(raw):
-    """
-    Strip protocol and www. only.
-    Trailing slash is intentionally preserved (matches source format).
-    """
+    """Strip protocol and www. Preserve paths and trailing slashes."""
     url = raw.strip()
     url = re.sub(r'^https?://', '', url)
     url = re.sub(r'^www\.', '', url)
     return url
 
-def looks_like_url(text):
-    """Return True if the text looks like a bare URL."""
-    t = text.strip()
-    return (
-        t.startswith("http://") or
-        t.startswith("https://") or
-        re.match(r'^[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/|$)', t)
-    )
+def is_excluded(url):
+    return any(ex in url for ex in EXCLUDED_DOMAINS)
 
 # ── Fetcher with retries ──────────────────────────────────────────────────────
 
 def fetch_page():
-    import time
     last_error = ""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -102,38 +97,45 @@ def fetch_page():
 
 def extract_urls(soup):
     """
-    The DGE sports wagering page lists URLs as plain text inside <td> cells
-    (no anchor wrapping). We scan every <td> whose text content looks like
-    a URL and collect it.
+    The ADG CheckYourBet page lists operators with linked URLs.
+    We collect all external <a href> links, excluding the regulator's own domain
+    and other administrative links.
 
-    Also catches any <a href> links inside table cells that point off-domain,
-    in case the page structure changes to use hyperlinks in a future update.
+    Also catches plain-text URLs in table cells (same pattern as NJ),
+    as a fallback in case the page uses bare text rather than anchors.
     """
     urls = []
     seen = set()
 
-    # ── Primary: bare-text <td> cells ────────────────────────────────────────
-    for td in soup.find_all("td"):
-        text = td.get_text(strip=True)
-        if looks_like_url(text):
-            cleaned = clean_url(text)
-            if cleaned and "." in cleaned and cleaned not in seen:
-                seen.add(cleaned)
-                urls.append(cleaned)
-                print(f"  Found (text td): {cleaned}")
+    # ── Primary: <a href> external links across the whole page ───────────────
+    for a in soup.find_all("a", href=True):
+        raw = a["href"].strip()
+        if not raw.startswith("http"):
+            continue
+        if is_excluded(raw):
+            continue
+        cleaned = clean_url(raw)
+        if not cleaned or "." not in cleaned:
+            continue
+        if cleaned not in seen:
+            seen.add(cleaned)
+            urls.append(cleaned)
+            print(f"  Found (anchor): {cleaned}")
 
-    # ── Secondary: <a href> links inside table cells (future-proofing) ────────
+    # ── Fallback: bare-text <td> cells ───────────────────────────────────────
     if not urls:
-        print("    ℹ️  No bare-URL cells found — trying anchored links in tables...")
+        print("    ℹ️  No external anchor links found — trying bare-text table cells...")
+        url_pattern = re.compile(
+            r'^(https?://)?[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/\S*)?$'
+        )
         for td in soup.find_all("td"):
-            for a in td.find_all("a", href=True):
-                raw = a["href"].strip()
-                if raw.startswith("http") and "njoag.gov" not in raw:
-                    cleaned = clean_url(raw)
-                    if cleaned and "." in cleaned and cleaned not in seen:
-                        seen.add(cleaned)
-                        urls.append(cleaned)
-                        print(f"  Found (anchor): {cleaned}")
+            text = td.get_text(strip=True)
+            if url_pattern.match(text) and not is_excluded(text):
+                cleaned = clean_url(text)
+                if cleaned and cleaned not in seen:
+                    seen.add(cleaned)
+                    urls.append(cleaned)
+                    print(f"  Found (text td): {cleaned}")
 
     return urls
 
@@ -141,11 +143,11 @@ def extract_urls(soup):
 
 def main():
     print("=" * 60)
-    print("🇺🇸  US NEW JERSEY LICENSED GAMBLING SITES SCRAPER (DGE)")
+    print("🇺🇸  US ARIZONA LICENSED GAMBLING SITES SCRAPER (ADG)")
     print("=" * 60)
     print(f"🔁  Retry policy: {MAX_RETRIES} attempts × {RETRY_DELAY}s delay\n")
 
-    print("🔍  Fetching DGE sports wagering page...")
+    print("🔍  Fetching ADG CheckYourBet page...")
     soup, error = fetch_page()
 
     if error:
@@ -158,7 +160,6 @@ def main():
         print("❌  No URLs found — check the page structure.")
         return
 
-    # Deduplicate (seen set already handles this, but sort for consistency)
     unique = sorted(set(urls))
 
     print(f"\n📊  Total unique URLs: {len(unique)}")
@@ -172,7 +173,7 @@ def main():
     for u in unique:
         print(f"    {u}")
 
-    write_canonical_csv(unique, 'NJ.csv')
+    write_canonical_csv(unique, 'AZ.csv')
     print("✅  Done.")
 
 if __name__ == "__main__":

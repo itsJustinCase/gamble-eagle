@@ -224,3 +224,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    if not os.environ.get("CI"):
+        input("\nPress Enter to close...")
