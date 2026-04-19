@@ -33,6 +33,14 @@ RETRY_DELAY  = 8
 
 EXCLUDED_DOMAINS = ["gaming.az.gov", "az.gov"]
 
+# Manual URLs to ensure are always included
+MANUAL_URLS = [
+    "fantasygolfchampionships.shgn.com",
+    "nfc.shgn.com",
+    "leaguesafe.com",
+    "fanball.com/lobby/salary-cap"
+]
+
 # ── Canonical CSV writer ──────────────────────────────────────────────────────
 
 def write_canonical_csv(urls, filepath):
@@ -87,6 +95,13 @@ def extract_urls(soup):
             if cleaned and "." in cleaned:
                 urls.add(cleaned)
                 print(f"  Found: {cleaned}")
+    
+    # Add manual URLs
+    for m_url in MANUAL_URLS:
+        if m_url not in urls:
+            urls.add(m_url)
+            print(f"  Added manual: {m_url}")
+            
     return list(urls)
 
 # ── Main ──────────────────────────────────────────────────────────────────────

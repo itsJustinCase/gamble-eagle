@@ -3,23 +3,6 @@
 Pennsylvania Licensed Gambling Sites Scraper
 =============================================
 Source: Pennsylvania Gaming Control Board (PGCB)
-
-Scrapes four pages:
-  - Interactive Gaming:   https://gamingcontrolboard.pa.gov/interactive-gaming-operators
-  - Sports Wagering:      https://gamingcontrolboard.pa.gov/online-sports-wagering-licensed-operators
-  - Online Poker:         https://gamingcontrolboard.pa.gov/online-poker-operators
-  - Fantasy Contests:     https://gamingcontrolboard.pa.gov/online-fantasy-contest-operators
-
-Each page has operator cards (div.pgcb-card) with a pgcb-card-link anchor.
-The href of that anchor is the licensed URL.
-
-Output: PA.csv
-  Line 1: timestamp (YYYYMMDD HH:MM Paris time)
-  Lines 2+: url,category  — two columns, no header row
-  Categories: igaming | sportsbetting | poker | fantasy
-
-Requirements:
-    pip install requests beautifulsoup4
 """
 
 import re
@@ -69,8 +52,6 @@ def write_pa_csv(records, filepath):
     PA-specific CSV:
       Line 1: timestamp
       Lines 2+: url,category  (no header)
-    Deduplicates by (url, category) pair so a URL licensed under
-    multiple categories appears once per category.
     """
     seen = set()
     unique = []
@@ -92,7 +73,7 @@ def write_pa_csv(records, filepath):
 # ── URL cleaner ───────────────────────────────────────────────────────────────
 
 def clean_url(raw):
-    """Strip protocol and www. Preserve paths and trailing slashes."""
+    """Strip protocol and www. Preserve paths."""
     url = raw.strip()
     url = re.sub(r'^https?://', '', url)
     url = re.sub(r'^www\.', '', url)
@@ -107,37 +88,22 @@ def fetch_page(url):
             print(f"    ↳ Attempt {attempt}/{MAX_RETRIES}...")
             r = requests.get(url, headers=HEADERS, timeout=20)
             r.raise_for_status()
-            print(f"    ✓ Loaded (HTTP {r.status_code})")
             return BeautifulSoup(r.content, "html.parser"), None
         except Exception as e:
             last_error = str(e)
             print(f"    ✗ Attempt {attempt}/{MAX_RETRIES} failed: {e}")
             if attempt < MAX_RETRIES:
-                print(f"    ⏳ Waiting {RETRY_DELAY}s...")
                 time.sleep(RETRY_DELAY)
     return None, f"Failed after {MAX_RETRIES} attempts — {last_error}"
 
 # ── Extractor ─────────────────────────────────────────────────────────────────
 
 def extract_from_page(soup, category):
-    """
-    Find all div.pgcb-card elements and extract the href from the
-    pgcb-card-link anchor inside each card.
-    Falls back to any anchor with an http href if class is missing.
-    """
     records = []
     cards = soup.find_all("div", class_=re.compile(r'\bpgcb-card\b'))
 
-    if not cards:
-        print(f"    ⚠️  No pgcb-card divs found — check page structure.")
-        return records
-
-    print(f"    📦  Found {len(cards)} cards")
-
     for card in cards:
-        # Primary: anchor with class pgcb-card-link
         a = card.find("a", class_="pgcb-card-link", href=True)
-        # Fallback: any anchor inside the card
         if not a:
             a = card.find("a", href=True)
         if not a:
@@ -150,8 +116,6 @@ def extract_from_page(soup, category):
         cleaned = clean_url(href)
         if cleaned and "." in cleaned:
             records.append((cleaned, category))
-            print(f"  [{category}] {cleaned}")
-
     return records
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -160,9 +124,9 @@ def main():
     print("=" * 60)
     print("🇺🇸  PENNSYLVANIA LICENSED GAMBLING SITES SCRAPER (PGCB)")
     print("=" * 60)
-    print(f"🔁  Retry policy: {MAX_RETRIES} attempts × {RETRY_DELAY}s delay\n")
 
     all_records = []
+    category_counts = {"igaming": 0, "sportsbetting": 0, "poker": 0, "fantasy": 0}
 
     for category, url in SOURCES:
         print(f"\n🔍  [{category.upper()}] {url}")
@@ -170,6 +134,7 @@ def main():
         if error:
             print(f"    ❌  {error}")
             continue
+        
         records = extract_from_page(soup, category)
         print(f"    ✅  {len(records)} records extracted")
         all_records.extend(records)
@@ -179,18 +144,27 @@ def main():
         print("\n❌  No records found across any page.")
         return
 
-    print(f"\n📊  Total raw records: {len(all_records)}")
-    unique = write_pa_csv(all_records, 'PA.csv')
-    print(f"📊  Total unique records written: {len(unique)}")
+    # Deduplicate and sort for summary calculation
+    unique_records = write_pa_csv(all_records, 'PA.csv')
+    
+    # Calculate totals from the unique list being written to CSV
+    for _, cat in unique_records:
+        if cat in category_counts:
+            category_counts[cat] += 1
 
-    if len(unique) < MIN_EXPECTED:
-        print(f"⚠️  Only {len(unique)} — below expected minimum of {MIN_EXPECTED}.")
+    print(f"📊  Total unique records written: {len(unique_records)}")
 
     print(f"\n🔍  Preview (first 15):")
-    for url, cat in unique[:15]:
+    for url, cat in unique_records[:15]:
         print(f"    {url:<55} {cat}")
-    if len(unique) > 15:
-        print(f"    ... and {len(unique) - 15} more")
+    if len(unique_records) > 15:
+        print(f"    ... and {len(unique_records) - 15} more")
+
+    # Required Category Summary
+    print(f"\ntotal igaming: {category_counts['igaming']}")
+    print(f"total sportsbetting: {category_counts['sportsbetting']}")
+    print(f"total poker: {category_counts['poker']}")
+    print(f"total fantasy: {category_counts['fantasy']}")
 
     print("\n✅  Done.")
 
