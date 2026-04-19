@@ -45,39 +45,34 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# ── CSV writer — two-column format ───────────────────────────────────────────
+# ── CSV writer — URL Only Format ──────────────────────────────────────────────
 
 def write_pa_csv(records, filepath):
     """
     PA-specific CSV:
       Line 1: timestamp
-      Lines 2+: url,category  (no header)
+      Lines 2+: url (NO category)
     """
-    seen = set()
-    unique = []
-    for url, cat in records:
-        key = (url.lower(), cat)
-        if key not in seen:
-            seen.add(key)
-            unique.append((url, cat))
-    unique.sort(key=lambda x: (x[0], x[1]))
+    # We use a set of URLs to ensure no duplicates, regardless of category
+    unique_urls = sorted(list(set(r[0] for r in records)))
 
     stamp = _paris_now().strftime('%Y%m%d %H:%M')
     with open(filepath, 'w', newline='', encoding='utf-8') as f:
         f.write(stamp + '\n')
-        for url, cat in unique:
-            f.write(f"{url},{cat}\n")
-    print(f"💾  Saved {len(unique)} records → {filepath}  (stamp: {stamp})")
-    return unique
+        for url in unique_urls:
+            f.write(f"{url}\n")
+    
+    print(f"💾  Saved {len(unique_urls)} unique URLs → {filepath}  (stamp: {stamp})")
+    return unique_urls
 
 # ── URL cleaner ───────────────────────────────────────────────────────────────
 
 def clean_url(raw):
-    """Strip protocol and www. Preserve paths."""
+    """Strip protocol, www, and trailing slashes."""
     url = raw.strip()
     url = re.sub(r'^https?://', '', url)
     url = re.sub(r'^www\.', '', url)
-    return url
+    return url.rstrip('/')
 
 # ── Fetcher with retries ──────────────────────────────────────────────────────
 
@@ -115,6 +110,7 @@ def extract_from_page(soup, category):
 
         cleaned = clean_url(href)
         if cleaned and "." in cleaned:
+            # We keep the category in the temporary list for the summary report
             records.append((cleaned, category))
     return records
 
@@ -144,27 +140,31 @@ def main():
         print("\n❌  No records found across any page.")
         return
 
-    # Deduplicate and sort for summary calculation
-    unique_records = write_pa_csv(all_records, 'PA.csv')
-    
-    # Calculate totals from the unique list being written to CSV
-    for _, cat in unique_records:
+    # Calculate category totals before we flatten for the CSV
+    # Note: If a URL is in multiple categories, it is counted in each category total
+    for _, cat in all_records:
         if cat in category_counts:
             category_counts[cat] += 1
 
-    print(f"📊  Total unique records written: {len(unique_records)}")
+    # Write the clean URL list to the CSV
+    unique_urls = write_pa_csv(all_records, 'PA.csv')
+
+    print(f"📊  Total unique URLs written: {len(unique_urls)}")
 
     print(f"\n🔍  Preview (first 15):")
-    for url, cat in unique_records[:15]:
-        print(f"    {url:<55} {cat}")
-    if len(unique_records) > 15:
-        print(f"    ... and {len(unique_records) - 15} more")
+    for url in unique_urls[:15]:
+        print(f"    {url}")
+    if len(unique_urls) > 15:
+        print(f"    ... and {len(unique_urls) - 15} more")
 
-    # Required Category Summary
+    # Required Category Summary (Total hits per category from source)
     print(f"\ntotal igaming: {category_counts['igaming']}")
     print(f"total sportsbetting: {category_counts['sportsbetting']}")
     print(f"total poker: {category_counts['poker']}")
     print(f"total fantasy: {category_counts['fantasy']}")
+
+    if len(unique_urls) < MIN_EXPECTED:
+         print(f"\n⚠️  Warning: Found {len(unique_urls)} records — below minimum.")
 
     print("\n✅  Done.")
 
