@@ -35,12 +35,19 @@ jobs:
           EXIT_CODE=$?
           cat monitor_output.txt
 
+          # Always extract markers (values will be empty if no change)
+          OLD_DATE=$(grep '^OLD_DATE=' monitor_output.txt | cut -d'=' -f2-)
+          OLD_COUNT=$(grep '^OLD_COUNT=' monitor_output.txt | cut -d'=' -f2-)
+          NEW_DATE=$(grep '^NEW_DATE=' monitor_output.txt | cut -d'=' -f2-)
+          NEW_COUNT=$(grep '^NEW_COUNT=' monitor_output.txt | cut -d'=' -f2-)
+
+          echo "old_date=$OLD_DATE" >> $GITHUB_OUTPUT
+          echo "old_count=$OLD_COUNT" >> $GITHUB_OUTPUT
+          echo "new_date=$NEW_DATE" >> $GITHUB_OUTPUT
+          echo "new_count=$NEW_COUNT" >> $GITHUB_OUTPUT
+
           if [ $EXIT_CODE -eq 1 ]; then
             echo "change_detected=true" >> $GITHUB_OUTPUT
-            echo "old_date=$(grep 'OLD_DATE=' monitor_output.txt | cut -d'=' -f2)" >> $GITHUB_OUTPUT
-            echo "old_count=$(grep 'OLD_COUNT=' monitor_output.txt | cut -d'=' -f2)" >> $GITHUB_OUTPUT
-            echo "new_date=$(grep 'NEW_DATE=' monitor_output.txt | cut -d'=' -f2)" >> $GITHUB_OUTPUT
-            echo "new_count=$(grep 'NEW_COUNT=' monitor_output.txt | cut -d'=' -f2)" >> $GITHUB_OUTPUT
             exit 1
           fi
 
