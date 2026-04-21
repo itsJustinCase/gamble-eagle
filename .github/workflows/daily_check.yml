@@ -2,13 +2,13 @@ name: Monitor API Changes
 
 on:
   schedule:
-    - cron: '0 5,15 * * *' # 15:00 UTC Daily
+    - cron: '0 5,15 * * *'
   workflow_dispatch:
 
 jobs:
   check-api:
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: write
 
@@ -28,24 +28,19 @@ jobs:
 
       - name: Run monitor script
         id: monitor
+        continue-on-error: true   # ← allows the job to continue when exit code is 1
         run: |
-          # Run script and capture output to both console and a file
           python monitor.py | tee monitor_output.txt
-          
-          # Check if the script indicated a change (exiting with 1)
+
           if [ ${PIPESTATUS[0]} -eq 1 ]; then
             echo "change_detected=true" >> $GITHUB_OUTPUT
-            
-            # Extract variables for the email body
             echo "old_date=$(grep 'OLD_DATE=' monitor_output.txt | cut -d'=' -f2)" >> $GITHUB_OUTPUT
             echo "old_count=$(grep 'OLD_COUNT=' monitor_output.txt | cut -d'=' -f2)" >> $GITHUB_OUTPUT
             echo "new_date=$(grep 'NEW_DATE=' monitor_output.txt | cut -d'=' -f2)" >> $GITHUB_OUTPUT
             echo "new_count=$(grep 'NEW_COUNT=' monitor_output.txt | cut -d'=' -f2)" >> $GITHUB_OUTPUT
-            
-            exit 1
           fi
 
-      - name: Commit changes if updated
+      - name: Commit updated state
         if: steps.monitor.outcome == 'failure'
         run: |
           git config --global user.name "github-actions[bot]"
@@ -58,7 +53,6 @@ jobs:
         id: email
         if: steps.monitor.outcome == 'failure'
         run: |
-          RUN_DATE=$(date +'%Y-%m-%d')
           {
             echo "body<<BODYEOF"
             echo "Ukraine API Update Detected"
@@ -77,11 +71,12 @@ jobs:
             echo ""
             echo "1. Go to https://monitoring.pc.gov.ua/"
             echo "2. Експорт -> reCAPTCHA -> CSV -> download"
-            echo "3. Run process scripts locally and push results."
+            echo "3. Place as full_database.csv in scrapers/"
+            echo "4. Run process_ukraine.py locally and push results."
             echo "BODYEOF"
           } >> $GITHUB_OUTPUT
 
-      - name: Send email summary
+      - name: Send email notification
         if: steps.monitor.outcome == 'failure'
         uses: dawidd6/action-send-mail@v3
         with:
