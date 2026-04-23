@@ -30,24 +30,17 @@ jobs:
         id: monitor
         continue-on-error: true
         run: |
-          # Capture output to file; also echo to console
           python monitor.py > monitor_output.txt 2>&1
           EXIT_CODE=$?
           cat monitor_output.txt
 
-          # Always extract markers (values will be empty if no change)
-          OLD_DATE=$(grep '^OLD_DATE=' monitor_output.txt | cut -d'=' -f2-)
-          OLD_COUNT=$(grep '^OLD_COUNT=' monitor_output.txt | cut -d'=' -f2-)
-          NEW_DATE=$(grep '^NEW_DATE=' monitor_output.txt | cut -d'=' -f2-)
-          NEW_COUNT=$(grep '^NEW_COUNT=' monitor_output.txt | cut -d'=' -f2-)
-
-          echo "old_date=$OLD_DATE" >> $GITHUB_OUTPUT
-          echo "old_count=$OLD_COUNT" >> $GITHUB_OUTPUT
-          echo "new_date=$NEW_DATE" >> $GITHUB_OUTPUT
-          echo "new_count=$NEW_COUNT" >> $GITHUB_OUTPUT
+          # Write parsed values to a separate env file so later steps can read them
+          grep '^OLD_DATE=' monitor_output.txt | cut -d'=' -f2- > old_date.txt   || echo "" > old_date.txt
+          grep '^OLD_COUNT=' monitor_output.txt | cut -d'=' -f2- > old_count.txt || echo "" > old_count.txt
+          grep '^NEW_DATE=' monitor_output.txt | cut -d'=' -f2- > new_date.txt   || echo "" > new_date.txt
+          grep '^NEW_COUNT=' monitor_output.txt | cut -d'=' -f2- > new_count.txt || echo "" > new_count.txt
 
           if [ $EXIT_CODE -eq 1 ]; then
-            echo "change_detected=true" >> $GITHUB_OUTPUT
             exit 1
           fi
 
@@ -63,25 +56,31 @@ jobs:
         id: email
         if: steps.monitor.outcome == 'failure'
         run: |
+          OLD_DATE=$(cat old_date.txt)
+          OLD_COUNT=$(cat old_count.txt)
+          NEW_DATE=$(cat new_date.txt)
+          NEW_COUNT=$(cat new_count.txt)
+
           {
+            echo "subject=🦅 Ukraine API Update: ${NEW_COUNT} domains detected #${{ github.run_number }}"
             echo "body<<BODYEOF"
             echo "Ukraine API Update Detected"
             echo ""
             echo "A change in the database has been identified:"
             echo ""
             echo "PREVIOUS STATE:"
-            echo "  Date:  ${{ steps.monitor.outputs.old_date }}"
-            echo "  Count: ${{ steps.monitor.outputs.old_count }}"
+            echo "  Date:  ${OLD_DATE}"
+            echo "  Count: ${OLD_COUNT}"
             echo ""
             echo "NEW STATE:"
-            echo "  Date:  ${{ steps.monitor.outputs.new_date }}"
-            echo "  Count: ${{ steps.monitor.outputs.new_count }}"
+            echo "  Date:  ${NEW_DATE}"
+            echo "  Count: ${NEW_COUNT}"
             echo ""
             echo "Action Required: Manual CSV update is needed."
             echo ""
             echo "1. Go to https://monitoring.pc.gov.ua/"
             echo "2. Експорт -> reCAPTCHA -> CSV -> download"
-            echo "3. Place as full_database.csv in scrapers/"
+            echo "3. Place as full_database.csv in UA/ folder"
             echo "4. Run process_ukraine.py locally and push results."
             echo "BODYEOF"
           } >> $GITHUB_OUTPUT
@@ -97,5 +96,5 @@ jobs:
           password: ${{ secrets.MAIL_PASSWORD }}
           to: ${{ secrets.MAIL_USERNAME }}
           from: Gamble Eagle <${{ secrets.MAIL_USERNAME }}>
-          subject: "🦅 Ukraine API Update: ${{ steps.monitor.outputs.new_count }} domains detected #${{ github.run_number }}"
+          subject: ${{ steps.email.outputs.subject }}
           body: ${{ steps.email.outputs.body }}
