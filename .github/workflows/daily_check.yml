@@ -56,10 +56,13 @@ jobs:
         id: email
         if: steps.monitor.outcome == 'failure'
         run: |
-          OLD_DATE=$(cat old_date.txt)
-          OLD_COUNT=$(cat old_count.txt)
-          NEW_DATE=$(cat new_date.txt)
-          NEW_COUNT=$(cat new_count.txt)
+          # New state — read directly from the updated last_state.json
+          NEW_DATE=$(python3 -c "import json; d=json.load(open('last_state.json')); print(d.get('last_updated','?'))")
+          NEW_COUNT=$(python3 -c "import json; d=json.load(open('last_state.json')); print(d.get('domains','?'))")
+
+          # Old state — read from the previous commit's last_state.json
+          OLD_DATE=$(git show HEAD~1:last_state.json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('last_updated','?'))" 2>/dev/null || echo "unknown")
+          OLD_COUNT=$(git show HEAD~1:last_state.json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('domains','?'))" 2>/dev/null || echo "unknown")
 
           {
             echo "subject=🦅 Ukraine API Update: ${NEW_COUNT} domains detected #${{ github.run_number }}"
