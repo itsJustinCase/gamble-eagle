@@ -51,6 +51,7 @@ CSV_FILES = {
     "NJ.csv":          "NJ.csv",
     "PA.csv":          "PA.csv",    
     "MI.csv":          "MI.csv",    
+    "TN.csv":          "TN.csv",        
 }
 
 GITHUB_API  = "https://api.github.com"
