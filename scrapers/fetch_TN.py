@@ -160,11 +160,15 @@ def parse_operators(html: str) -> list:
 # ── Save ──────────────────────────────────────────────────────────────────────
 
 def save_csv(records: list, filename: str):
-    with open(filename, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["operator", "url"])
-        writer.writeheader()
-        writer.writerows(records)
-    print(f"\n💾  Saved {len(records)} rows → {filename}")
+    from datetime import datetime, timezone, timedelta
+    paris = timezone(timedelta(hours=2))
+    stamp = datetime.now(paris).strftime("%Y%m%d %H:%M")
+    urls = [r["url"] for r in records if r["url"]]
+    with open(filename, "w", encoding="utf-8", newline="") as f:
+        f.write(stamp + "\n")
+        for url in urls:
+            f.write(url + "\n")
+    print(f"\n💾  Saved {len(urls)} URLs → {filename}  (stamp: {stamp})")
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
