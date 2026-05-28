@@ -26,5 +26,25 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add ukraine.csv ukraine_blacklist.csv
-          # Only push if the processed files actually changed
           git diff --quiet && git diff --staged --quiet || (git commit -m "Manual update: Ukraine lists" && git push)
+
+      - name: Send failure alert
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          to: ${{ secrets.MAIL_USERNAME }}
+          from: Gamble Eagle <${{ secrets.MAIL_USERNAME }}>
+          subject: "🚨 Ukraine manual update FAILED #${{ github.run_number }}"
+          body: |
+            The UA manual update workflow failed.
+
+            This usually means process_ukraine.py hit the failsafe —
+            the full_database.csv may have 0 or suspiciously few domains.
+
+            Check the Actions log for details:
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
