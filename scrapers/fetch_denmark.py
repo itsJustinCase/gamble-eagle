@@ -3,6 +3,7 @@
 Danish Gambling Authority - Domain Extractor
 Extracts domains from the Domains column in the table
 All 7 license filters selected
+UTF-8 with BOM for proper encoding
 """
 
 import sys
