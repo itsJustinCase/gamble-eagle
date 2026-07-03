@@ -55,7 +55,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install requests beautifulsoup4 playwright pandas openpyxl pytz curl-cffi
-          playwright install chromium --with-deps
+          playwright install chromium --with-deps selenium webdriver-manager
 
       # ── 4. Run scrapers ──────────────────────────────────────────────────────
       # Each scraper writes its canonical CSV relative to its own location.
