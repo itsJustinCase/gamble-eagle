@@ -4,6 +4,7 @@ Danish Gambling Authority - Domain Extractor
 Extracts domains from the Domains column in the table
 All 7 license filters selected
 UTF-8 with BOM for proper encoding
+Outputs to denmark.csv for GitHub workflow
 """
 
 import sys
@@ -406,20 +407,22 @@ def scrape_all_pages():
 
 
 def save_to_csv(domains):
-    """Save domains to CSV with UTF-8 BOM for proper encoding"""
+    """Save domains to denmark.csv with UTF-8 BOM for proper encoding"""
     if not domains:
         print("\n❌ No domains to save")
-        return None
+        return False
     
     domains_sorted = sorted(domains, key=lambda x: x.lower())
     
-    timestamp = datetime.now().strftime("%Y%m%d %H:%M")
-    filename = f"denmark_{datetime.now().strftime('%Y%m%d')}.csv"
+    # Fixed filename for GitHub workflow
+    filename = "denmark.csv"
     
     # Use utf-8-sig to add BOM (Byte Order Mark)
     # This ensures Excel and other programs recognize it as UTF-8
     with open(filename, 'w', newline='', encoding='utf-8-sig') as csvfile:
         writer = csv.writer(csvfile)
+        # Write timestamp as first line
+        timestamp = datetime.now().strftime("%Y%m%d %H:%M")
         writer.writerow([timestamp])
         for domain in domains_sorted:
             writer.writerow([domain])
@@ -431,7 +434,7 @@ def save_to_csv(domains):
     print(f"📅 Timestamp: {timestamp}")
     print(f"🌐 Total domains: {len(domains_sorted)}")
     
-    return filename
+    return True
 
 
 def main():
