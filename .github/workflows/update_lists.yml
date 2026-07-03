@@ -54,7 +54,7 @@ jobs:
       # ── 3. Install dependencies ──────────────────────────────────────────────
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 playwright pandas openpyxl pytz curl-cffi
+          pip install requests beautifulsoup4 playwright pandas openpyxl pytz curl-cffi selenium webdriver-manager
           playwright install chromium --with-deps
 
       # ── 4. Run scrapers ──────────────────────────────────────────────────────
