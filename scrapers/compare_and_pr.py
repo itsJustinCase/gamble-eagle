@@ -43,7 +43,6 @@ CSV_FILES = {
     "greece_blacklist.csv": "greece_blacklist.csv",
     "netherlands.csv": "netherlands.csv",
     "portugal.csv":    "portugal.csv",    
-    "spain.csv":       "spain.csv",
     "sweden.csv":      "sweden.csv",
     "UK.csv":          "UK.csv",
     "ontario.csv":     "ontario.csv",
