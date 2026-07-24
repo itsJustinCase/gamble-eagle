@@ -3,7 +3,7 @@
 Greece Blacklist Scraper (HGC)
 ==============================
 Source: Hellenic Gaming Commission
-        https://www.gamingcommission.gov.gr/images/epopteia-kai-elegxos/blacklist/blacklist_en.xlsx
+        https://hgc.gov.gr/wp-content/uploads/blacklist.xlsx
 
 Excel structure:
   Row 1: Title row ("Hellenic Gaming Commission -- CATALOG (Blacklist...)")
@@ -33,7 +33,7 @@ except ImportError:
     def _paris_now():
         return datetime.now(_PARIS)
 
-URL          = "https://www.gamingcommission.gov.gr/images/epopteia-kai-elegxos/blacklist/blacklist_en.xlsx"
+URL          = "https://hgc.gov.gr/wp-content/uploads/blacklist.xlsx"
 MIN_EXPECTED = 10
 
 HEADERS = {
