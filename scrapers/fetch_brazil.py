@@ -28,10 +28,10 @@ except ImportError:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-INDEX_URL = (
-    "https://www.gov.br/fazenda/pt-br/composicao/orgaos/"
-    "secretaria-de-premios-e-apostas/lista-de-empresas/"
-)
+TARGET_URLS = [
+    "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/lista-de-empresas/empresas-autorizadas",
+    "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/lista-de-empresas/autorizadas-por-determinacao-judicial",
+]
 
 BASE_URL = "https://www.gov.br"
 
@@ -56,7 +56,7 @@ def write_canonical_csv(urls, filepath):
             f.write(url.strip() + '\n')
     print(f"💾  Saved {len(urls)} URLs → {filepath}  (stamp: {stamp})")
 
-# ── URL cleaning ──────────────────────────────────────────────────────────────
+# ── Domain splitting & cleaning ───────────────────────────────────────────────
 
 def clean_domain(raw):
     d = raw.strip().lower()
@@ -77,37 +77,64 @@ def is_valid(domain):
         return False
     return True
 
-# ── Page Scraper — Dynamic Link Finder ────────────────────────────────────────
-
-def find_target_file_urls(session):
-    print("🌐  Fetching index page to find target file URLs...")
-    r = session.get(INDEX_URL, headers=HEADERS, timeout=20)
-    r.raise_for_status()
-
-    soup = BeautifulSoup(r.content, 'html.parser')
-    file_urls = []
-
-    # Dynamic regex matching for target authorization spreadsheet and judicial processes
-    patterns = [
-        re.compile(r'planilha.*autoriza', re.IGNORECASE),
-        re.compile(r'processos.*judiciais', re.IGNORECASE)
-    ]
-
-    for a in soup.find_all('a', href=True):
-        href = a['href']
-        text = a.get_text()
-        
-        if any(p.search(href) or p.search(text) for p in patterns):
-            target_url = href if href.startswith('http') else BASE_URL + href
-            if target_url not in file_urls:
-                file_urls.append(target_url)
-
-    for u in file_urls:
-        print(f"    📄  Found: {u}")
-
-    return file_urls
+def process_raw_text(text):
+    """Splits grouped domain strings (by whitespace, linebreaks, commas, semicolons, slashes)
+    into distinct domain entries."""
+    if not text:
+        return []
+    
+    extracted = []
+    # Split by newlines, spaces, commas, semicolons, slashes, or bullet separators
+    tokens = re.split(r'[\r\n,;\s/]+', str(text))
+    for token in tokens:
+        item = token.strip()
+        if not item or 'a definir' in item.lower():
+            continue
+        cleaned = clean_domain(item)
+        if is_valid(cleaned):
+            extracted.append(cleaned)
+    return extracted
 
 # ── Parsers ───────────────────────────────────────────────────────────────────
+
+def extract_from_html_tables(soup):
+    domains = []
+    tables = soup.find_all('table')
+
+    for table in tables:
+        rows = table.find_all('tr')
+        if not rows:
+            continue
+
+        domain_col = None
+        header_row_idx = None
+
+        # Locate the header row containing 'domínio' or 'domínios'
+        for i, row in enumerate(rows):
+            cells = [cell.get_text(strip=True) for cell in row.find_all(['th', 'td'])]
+            for j, text in enumerate(cells):
+                low_text = text.lower()
+                if 'dom' in low_text and ('nio' in low_text or 'nios' in low_text):
+                    domain_col = j
+                    header_row_idx = i
+                    break
+            if domain_col is not None:
+                break
+
+        if domain_col is None:
+            continue
+
+        # Extract values from rows following the header
+        for row in rows[header_row_idx + 1:]:
+            cells = row.find_all(['td', 'th'])
+            if len(cells) <= domain_col:
+                continue
+
+            # Get raw cell text retaining line breaks
+            raw_cell = cells[domain_col].get_text(separator='\n', strip=True)
+            domains.extend(process_raw_text(raw_cell))
+
+    return domains
 
 def extract_from_excel(content):
     domains = []
@@ -122,7 +149,8 @@ def extract_from_excel(content):
         for i, row in enumerate(rows):
             for j, cell in enumerate(row):
                 if cell and isinstance(cell, str):
-                    if 'dom' in cell.lower() and ('nio' in cell.lower() or 'nios' in cell.lower()):
+                    low_cell = cell.lower()
+                    if 'dom' in low_cell and ('nio' in low_cell or 'nios' in low_cell):
                         domain_col = j
                         header_row_idx = i
                         break
@@ -135,12 +163,7 @@ def extract_from_excel(content):
         for row in rows[header_row_idx + 1:]:
             if len(row) <= domain_col or row[domain_col] is None:
                 continue
-            raw = str(row[domain_col]).strip()
-            if 'a definir' in raw.lower():
-                continue
-            cleaned = clean_domain(raw)
-            if is_valid(cleaned):
-                domains.append(cleaned)
+            domains.extend(process_raw_text(row[domain_col]))
 
     return domains
 
@@ -154,7 +177,8 @@ def extract_from_csv(content_bytes):
     header_row_idx = None
     for i, row in enumerate(rows):
         for j, cell in enumerate(row):
-            if 'dom' in cell.lower() and ('nio' in cell.lower() or 'nios' in cell.lower()):
+            low_cell = cell.lower()
+            if 'dom' in low_cell and ('nio' in low_cell or 'nios' in low_cell):
                 domain_col = j
                 header_row_idx = i
                 break
@@ -167,26 +191,50 @@ def extract_from_csv(content_bytes):
     for row in rows[header_row_idx + 1:]:
         if len(row) <= domain_col:
             continue
-        raw = row[domain_col].strip()
-        if not raw or 'a definir' in raw.lower():
-            continue
-        cleaned = clean_domain(raw)
-        if is_valid(cleaned):
-            domains.append(cleaned)
+        domains.extend(process_raw_text(row[domain_col]))
 
     return domains
 
-def fetch_and_extract(session, url):
-    print(f"📥  Downloading {url.split('/')[-1]}...")
+def process_page(session, url):
+    print(f"🌐  Fetching page: {url}")
     r = session.get(url, headers=HEADERS, timeout=30)
     r.raise_for_status()
 
-    if url.lower().endswith('.xlsx'):
-        domains = extract_from_excel(r.content)
-    else:
-        domains = extract_from_csv(r.content)
+    soup = BeautifulSoup(r.content, 'html.parser')
+    domains = []
 
-    print(f"    📊  Extracted {len(domains)} domains")
+    # 1. Primary: Extract directly from inline HTML tables
+    html_domains = extract_from_html_tables(soup)
+    domains.extend(html_domains)
+
+    # 2. Fallback: Search for downloadable spreadsheets linked on the page
+    patterns = [
+        re.compile(r'\.(xlsx|csv)$', re.IGNORECASE),
+        re.compile(r'planilha', re.IGNORECASE)
+    ]
+    
+    file_urls = []
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        text = a.get_text()
+        if any(p.search(href) or p.search(text) for p in patterns):
+            file_url = href if href.startswith('http') else BASE_URL + href
+            if file_url not in file_urls:
+                file_urls.append(file_url)
+
+    for file_url in file_urls:
+        try:
+            print(f"    📥  Found downloadable file: {file_url.split('/')[-1]}")
+            fr = session.get(file_url, headers=HEADERS, timeout=30)
+            fr.raise_for_status()
+            if file_url.lower().endswith('.xlsx'):
+                domains.extend(extract_from_excel(fr.content))
+            else:
+                domains.extend(extract_from_csv(fr.content))
+        except Exception as e:
+            print(f"    ❌  Failed to process file {file_url}: {e}")
+
+    print(f"    📊  Extracted {len(domains)} domains from {url.split('/')[-1]}")
     return domains
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -199,22 +247,12 @@ def main():
     session = requests.Session()
     all_domains = []
 
-    try:
-        urls = find_target_file_urls(session)
-    except Exception as e:
-        print(f"❌  Failed to fetch index page: {e}")
-        return
-
-    if not urls:
-        print("❌  No target file URLs found on page.")
-        return
-
-    for url in urls:
+    for url in TARGET_URLS:
         try:
-            domains = fetch_and_extract(session, url)
+            domains = process_page(session, url)
             all_domains.extend(domains)
         except Exception as e:
-            print(f"    ❌  Failed to process {url}: {e}")
+            print(f"❌  Failed to process page {url}: {e}")
 
     seen = set()
     unique = []
@@ -224,7 +262,7 @@ def main():
             unique.append(d)
     unique.sort()
 
-    print(f"\n📊  Total unique domains: {len(unique)}")
+    print(f"\n📊  Total unique domains combined: {len(unique)}")
 
     if len(unique) < MIN_EXPECTED:
         print(f"❌  Only {len(unique)} domains found — below minimum threshold ({MIN_EXPECTED}).")
