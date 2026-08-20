@@ -77,8 +77,30 @@ jobs:
             python "$1" && echo "✅  $1 done" || echo "❌  $1 failed"
           }
 
+          ALL_SCRAPERS=(
+            "fetch_TN.py"
+            "fetch_arizona.py"
+            "fetch_australia.py"
+            "fetch_australia_blacklist.py"            
+            "fetch_brazil.py"
+            "fetch_canada.py"
+            "fetch_colombia.py"
+            "fetch_denmark.py"            
+            "fetch_france.py"
+            "fetch_france_blacklist.py"
+            "fetch_greece.py"
+            "fetch_greece_blacklist.py"
+            "fetch_michigan.py"
+            "fetch_netherlands.py"
+            "fetch_new_jersey.py"
+            "fetch_pennsylvania.py"
+            "fetch_portugal.py"
+            "fetch_sweden.py"
+            "fetch_uk.py"
+          )
+
           if [ "$SCRAPERS" = "all" ]; then
-            for f in fetch_*.py; do
+            for f in "${ALL_SCRAPERS[@]}"; do
               run_scraper "$f"
             done
           else
