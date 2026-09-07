@@ -3,7 +3,8 @@
 Brazil Licensed Gambling Sites Scraper
 =======================================
 Source: Secretaria de Prêmios e Apostas (SPA) — Ministério da Fazenda
-        https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/lista-de-empresas/
+        https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/transparencia-ativa-processos-de-autorizacao-de-apostas-de-quota-fixa
+
 """
 
 import os
@@ -29,8 +30,8 @@ except ImportError:
 # ── Config ────────────────────────────────────────────────────────────────────
 
 TARGET_URLS = [
-    "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/lista-de-empresas/empresas-autorizadas",
-    "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/lista-de-empresas/autorizadas-por-determinacao-judicial",
+    "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/transparencia-ativa-processos-de-autorizacao-de-apostas-de-quota-fixa/empresas-autorizadas",
+    "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/transparencia-ativa-processos-de-autorizacao-de-apostas-de-quota-fixa/autorizadas-por-determinacao-judicial",
 ]
 
 BASE_URL = "https://www.gov.br"
