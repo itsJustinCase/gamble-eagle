@@ -68,10 +68,15 @@ def write_pa_csv(records, filepath):
 # ── URL cleaner ───────────────────────────────────────────────────────────────
 
 def clean_url(raw):
-    """Strip protocol, www, and trailing slashes."""
+    """Strip protocol, www, trailing slashes, and campaign query parameters."""
     url = raw.strip()
     url = re.sub(r'^https?://', '', url)
     url = re.sub(r'^www\.', '', url)
+    
+    # If 'campaignid' is present anywhere in the URL, truncate everything from the first '/' onwards
+    if 'campaignid' in url.lower():
+        url = url.split('/')[0]
+        
     return url.rstrip('/')
 
 # ── Fetcher with retries ──────────────────────────────────────────────────────
