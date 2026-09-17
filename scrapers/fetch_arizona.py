@@ -31,7 +31,7 @@ MIN_EXPECTED = 15
 MAX_RETRIES  = 5
 RETRY_DELAY  = 8 
 
-EXCLUDED_DOMAINS = ["gaming.az.gov", "az.gov"]
+EXCLUDED_DOMAINS = ["gaming.az.gov", "az.gov", "maps.app.goo.gl"]
 
 # Manual URLs to ensure are always included
 MANUAL_URLS = [
