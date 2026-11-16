@@ -46,6 +46,7 @@ CSV_FILES = {
     "sweden.csv":      "sweden.csv",
     "UK.csv":          "UK.csv",
     "ontario.csv":     "ontario.csv",
+    "alberta.csv":     "alberta.csv",
     "AZ.csv":           "AZ.csv",    
     "NJ.csv":          "NJ.csv",
     "PA.csv":          "PA.csv",    
